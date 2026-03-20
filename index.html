@@ -671,6 +671,97 @@ function getSampleNews() {
 loadNews();
 
 // ============================================================
+// 話題株ダイジェスト（Google News経由で株探記事を取得）
+// ============================================================
+async function loadKabutanDigest() {
+  const wrap  = document.getElementById('digestWrap');
+  const badge = document.getElementById('digestBadge');
+  try {
+    // Google Newsで「話題株ダイジェスト site:kabutan.jp」を検索
+    const rssUrl  = 'https://news.google.com/rss/search?q=%E8%A9%B1%E9%A1%8C%E6%A0%AA%E3%83%80%E3%82%A4%E3%82%B8%E3%82%A7%E3%82%B9%E3%83%88+site%3Akabutan.jp&hl=ja&gl=JP&ceid=JP:ja';
+    const proxyUrl = PROXY + encodeURIComponent(rssUrl);
+    const res  = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) });
+    const text = await res.text();
+
+    const itemBlocks = [...text.matchAll(/<item>([\s\S]*?)<\/item>/gi)].map(m => m[1]);
+
+    const digestItems = itemBlocks.map(block => {
+      const titleM = block.match(/<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>|<title>([\s\S]*?)<\/title>/i);
+      let title = (titleM?.[1] ?? titleM?.[2] ?? '').trim();
+      title = title.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
+      title = title.replace(/\s+-\s+[^-]+$/, '').trim(); // 「- 株探」除去
+
+      // Google NewsのリンクはGoogleリダイレクトURLなので、
+      // guidまたはlinkのどちらかから取得
+      let link = '';
+      const linkM = block.match(/<link>(https?:\/\/[^\s<]+)<\/link>/i);
+      if (linkM) link = linkM[1].trim();
+      if (!link) {
+        const guidM = block.match(/<guid[^>]*>(https?:\/\/[^\s<]+)<\/guid>/i);
+        if (guidM) link = guidM[1].trim();
+      }
+
+      const pubM = block.match(/<pubDate>([\s\S]*?)<\/pubDate>/i);
+      const dt = pubM ? new Date(pubM[1].trim()) : new Date();
+      return { title, link, dt };
+    }).filter(n => n.title.includes('話題株ダイジェスト') || n.title.includes('ダイジェスト'));
+
+    if (digestItems.length === 0) {
+      badge.textContent = '今週号待ち';
+      wrap.innerHTML = `
+        <div style="font-size:.82rem;color:var(--text-sub);line-height:1.7;padding:4px 0;">
+          今週の話題株ダイジェストはまだ公開されていません。<br>毎週末に自動取得します。
+        </div>
+        <a href="https://kabutan.jp/news/marketnews/" target="_blank" rel="noopener"
+           style="display:block;margin-top:10px;padding:8px 12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;text-decoration:none;color:#c2410c;font-size:.82rem;font-weight:500;">
+          🔍 株探で確認する ↗
+        </a>`;
+      return;
+    }
+
+    const latest  = digestItems[0];
+    const dateStr = `${latest.dt.getFullYear()}/${latest.dt.getMonth()+1}/${latest.dt.getDate()}`;
+    badge.textContent = `最新: ${dateStr}`;
+    badge.style.background = '#fff7ed';
+    badge.style.color = '#c2410c';
+
+    wrap.innerHTML = `
+      <a href="${latest.link}" target="_blank" rel="noopener noreferrer"
+         style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:linear-gradient(135deg,#fff7ed,#fffbeb);border:1px solid #fed7aa;border-radius:10px;text-decoration:none;color:inherit;"
+         onmouseover="this.style.boxShadow='0 4px 12px rgba(0,0,0,.1)'" onmouseout="this.style.boxShadow='none'">
+        <span style="font-size:1.4rem;flex-shrink:0;">📋</span>
+        <div>
+          <div style="font-size:.85rem;font-weight:600;color:#92400e;line-height:1.5;margin-bottom:4px;">${latest.title}</div>
+          <div style="font-size:.73rem;color:#b45309;">${dateStr} 掲載 ↗</div>
+        </div>
+      </a>
+      ${digestItems.length > 1 ? `
+        <div style="margin-top:10px;">
+          <div style="font-size:.72rem;color:var(--text-sub);margin-bottom:6px;font-weight:600;">過去のダイジェスト</div>
+          ${digestItems.slice(1,4).map(item => {
+            const d = item.dt;
+            return `<a href="${item.link}" target="_blank" rel="noopener"
+              style="display:flex;justify-content:space-between;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);text-decoration:none;color:var(--text-sub);font-size:.78rem;">
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${item.title.replace(/今週の|【話題株ダイジェスト】/g,'').trim()}</span>
+              <span style="font-family:monospace;font-size:.7rem;flex-shrink:0;margin-left:8px;">${d.getMonth()+1}/${d.getDate()}</span>
+            </a>`;
+          }).join('')}
+        </div>` : ''}`;
+
+  } catch(e) {
+    console.warn('Digest fetch error:', e);
+    badge.textContent = '取得失敗';
+    wrap.innerHTML = `
+      <div style="font-size:.82rem;color:var(--text-sub);padding:4px 0;">取得できませんでした。</div>
+      <a href="https://kabutan.jp/news/marketnews/" target="_blank" rel="noopener"
+         style="display:block;margin-top:8px;padding:8px 12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;text-decoration:none;color:#c2410c;font-size:.82rem;">
+        🔍 株探で確認する ↗
+      </a>`;
+  }
+}
+loadKabutanDigest();
+
+// ============================================================
 // 話題株ダイジェスト（株探）
 // ============================================================
 async function loadKabutanDigest() {
