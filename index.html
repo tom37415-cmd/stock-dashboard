@@ -529,7 +529,7 @@ fetchAllTickers();
 // NEWS — rss2json.com API経由（CORS完全回避）
 // ============================================================
 
-const RSS2JSON = 'https://api.rss2json.com/v1/api.json?rss_url=';
+const RSS2JSON = 'https://rss-proxy.tom37415.workers.dev/?url=';
 
 const RSS_SOURCES = [
   { url:'https://news.google.com/rss/search?q=%E6%97%A5%E6%9C%AC%E6%A0%AA+%E6%A0%AA%E4%BE%A1+%E6%97%A5%E7%B5%8C&hl=ja&gl=JP&ceid=JP:ja', label:'国内株', cls:'src-minkabu', tag:'market' },
