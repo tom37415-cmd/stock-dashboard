@@ -689,7 +689,8 @@ async function loadKabutanDigest() {
       const titleM = block.match(/<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>|<title>([\s\S]*?)<\/title>/i);
       let title = (titleM?.[1] ?? titleM?.[2] ?? '').trim();
       title = title.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
-      title = title.replace(/\s+-\s+[^-]+$/, '').trim(); // 「- 株探」除去
+      title = title.replace(/\s+-\s+[^-]+$/, '').trim(); // 「- かぶたん」除去
+      title = title.replace(/^【注目】\s*/,'').trim(); // 「【注目】」除去
 
       // Google NewsのリンクはGoogleリダイレクトURLなので、
       // guidまたはlinkのどちらかから取得
@@ -704,7 +705,7 @@ async function loadKabutanDigest() {
       const pubM = block.match(/<pubDate>([\s\S]*?)<\/pubDate>/i);
       const dt = pubM ? new Date(pubM[1].trim()) : new Date();
       return { title, link, dt };
-    }).filter(n => n.title.includes('話題株ダイジェスト') || n.title.includes('ダイジェスト'));
+    }).filter(n => n.title.includes('ダイジェスト'));
 
     if (digestItems.length === 0) {
       badge.textContent = '今週号待ち';
