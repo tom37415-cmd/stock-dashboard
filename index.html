@@ -529,7 +529,7 @@ fetchAllTickers();
 // NEWS — rss2json.com API経由（CORS完全回避）
 // ============================================================
 
-const RSS2JSON = 'https://rss-proxy.tom37415.workers.dev/?url=';
+const PROXY = 'https://rss-proxy.tom37415.workers.dev/?url=';
 
 const RSS_SOURCES = [
   { url:'https://news.google.com/rss/search?q=%E6%97%A5%E6%9C%AC%E6%A0%AA+%E6%A0%AA%E4%BE%A1+%E6%97%A5%E7%B5%8C&hl=ja&gl=JP&ceid=JP:ja', label:'国内株', cls:'src-minkabu', tag:'market' },
@@ -570,17 +570,22 @@ function timeAgo(dt) {
 
 async function fetchRSS(src) {
   try {
-    const apiUrl = RSS2JSON + encodeURIComponent(src.url) + '&count=15';
-    const res = await fetch(apiUrl, { signal: AbortSignal.timeout(10000) });
-    const data = await res.json();
-    if (data.status !== 'ok' || !data.items) return [];
-    return data.items.map(item => {
-      let title = (item.title || '').trim();
-      // 「タイトル - 媒体名」から媒体名を除去
+  const proxyUrl = PROXY + encodeURIComponent(src.url);
+    const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) });
+    const text = await res.text();
+    const itemBlocks = [...text.matchAll(/<item>([\s\S]*?)<\/item>/gi)].map(m => m[1]);
+    return itemBlocks.slice(0, 15).map(block => {
+      const titleM = block.match(/<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>|<title>([\s\S]*?)<\/title>/i);
+      let title = (titleM?.[1] ?? titleM?.[2] ?? '').trim();
+      title = title.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
       title = title.replace(/\s+-\s+[^-]+$/, '').trim();
-      const link = item.link || item.guid || '#';
-      const dt   = item.pubDate ? new Date(item.pubDate) : new Date();
-      return { title, link, dt, src, tag: detectTag(title, src.tag) };
+      let link = '';
+      const linkM = block.match(/<link>(https?:\/\/[^\s<]+)<\/link>/i);
+      if (linkM) link = linkM[1].trim();
+      if (!link) { const guidM = block.match(/<guid[^>]*>(https?:\/\/[^\s<]+)<\/guid>/i); if (guidM) link = guidM[1].trim(); }
+      const pubM = block.match(/<pubDate>([\s\S]*?)<\/pubDate>/i);
+      const dt = pubM ? new Date(pubM[1].trim()) : new Date();
+      return { title, link: link||'#', dt, src, tag: detectTag(title, src.tag) };
     }).filter(n => n.title.length > 0);
   } catch(e) {
     console.warn('RSS fetch error:', src.label, e);
