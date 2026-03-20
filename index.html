@@ -769,7 +769,7 @@ async function loadKabutanDigest() {
   const wrap = document.getElementById('digestWrap');
   const badge = document.getElementById('digestBadge');
   try {
-    const rssUrl = 'https://kabutan.jp/rss/news';
+    const rssUrl = 'https://news.google.com/rss/search?q=%E8%A9%B1%E9%A1%8C%E6%A0%AA%E3%83%80%E3%82%A4%E3%82%B8%E3%82%A7%E3%82%B9%E3%83%88+site%3Akabutan.jp&hl=ja&gl=JP&ceid=JP:ja';
     const proxyUrl = PROXY + encodeURIComponent(rssUrl);
     const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) });
     const text = await res.text();
