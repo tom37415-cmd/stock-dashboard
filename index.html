@@ -339,6 +339,17 @@
       </div>
     </div>
 
+    <!-- 話題株ダイジェスト -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><div class="card-title-icon icon-red">🔥</div>話題株ダイジェスト</div>
+        <span class="card-badge badge-amber" id="digestBadge">確認中...</span>
+      </div>
+      <div id="digestWrap" style="padding:12px 18px;">
+        <div class="loading-box"><div class="spinner"></div>取得中...</div>
+      </div>
+    </div>
+
     <!-- YOUTUBE -->
     <div class="card">
       <div class="card-header">
@@ -526,7 +537,7 @@ renderTicker([
 fetchAllTickers();
 
 // ============================================================
-// NEWS — rss2json.com API経由（CORS完全回避）
+// NEWS — Cloudflare Worker プロキシ経由（CORS完全回避）
 // ============================================================
 
 const PROXY = 'https://rss-proxy.tom37415.workers.dev/?url=';
@@ -535,7 +546,8 @@ const RSS_SOURCES = [
   { url:'https://news.google.com/rss/search?q=%E6%97%A5%E6%9C%AC%E6%A0%AA+%E6%A0%AA%E4%BE%A1+%E6%97%A5%E7%B5%8C&hl=ja&gl=JP&ceid=JP:ja', label:'国内株', cls:'src-minkabu', tag:'market' },
   { url:'https://news.google.com/rss/search?q=%E7%B1%B3%E5%9B%BD%E6%A0%AA+%E3%83%8A%E3%82%B9%E3%83%80%E3%83%83%E3%82%AF+S%26P500&hl=ja&gl=JP&ceid=JP:ja', label:'米国株', cls:'src-bbc', tag:'us' },
   { url:'https://news.google.com/rss/search?q=%E6%97%A5%E9%8A%80+%E7%82%BA%E6%9B%BF+%E9%87%91%E5%88%A9+%E7%B5%8C%E6%B8%88&hl=ja&gl=JP&ceid=JP:ja', label:'マクロ', cls:'src-nikkei', tag:'macro' },
-  { url:'https://news.google.com/rss/search?q=%E3%83%88%E3%83%A9%E3%83%B3%E3%83%97+%E9%96%A2%E7%A8%8E+%E7%B1%B3%E5%9B%BD%E5%A4%A7%E7%B5%B1%E9%A0%98+%E7%99%BA%E8%A8%80&hl=ja&gl=JP&ceid=JP:ja', label:'🇺🇸', cls:'src-trump', tag:'trump' },
+  { url:'https://news.google.com/rss/search?q=%E3%83%88%E3%83%A9%E3%83%B3%E3%83%97+%E9%96%A2%E7%A8%8E+%E7%99%BA%E8%A8%80+when%3A3d&hl=ja&gl=JP&ceid=JP:ja', label:'🇺🇸', cls:'src-trump', tag:'trump' },
+  { url:'https://news.google.com/rss/search?q=%E3%83%88%E3%83%A9%E3%83%B3%E3%83%97+%E7%B1%B3%E5%9B%BD%E5%A4%A7%E7%B5%B1%E9%A0%98+when%3A3d&hl=ja&gl=JP&ceid=JP:ja', label:'🇺🇸', cls:'src-trump', tag:'trump' },
   { url:'https://news.google.com/rss/search?q=%E3%82%AC%E3%82%B6+%E3%82%A4%E3%82%B9%E3%83%A9%E3%82%A8%E3%83%AB+%E4%B8%AD%E6%9D%B1+%E3%82%A4%E3%83%A9%E3%83%B3&hl=ja&gl=JP&ceid=JP:ja', label:'🌏', cls:'src-mideast', tag:'mideast' },
   { url:'https://news.google.com/rss/search?q=%E5%8D%8A%E5%B0%8E%E4%BD%93+AI+%E6%8A%80%E8%A1%93%E6%A0%AA&hl=ja&gl=JP&ceid=JP:ja', label:'セクター', cls:'src-yahoo', tag:'sector' },
 ];
@@ -570,23 +582,36 @@ function timeAgo(dt) {
 
 async function fetchRSS(src) {
   try {
-  const proxyUrl = PROXY + encodeURIComponent(src.url);
+    const proxyUrl = PROXY + encodeURIComponent(src.url);
     const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) });
     const text = await res.text();
+
+    // itemブロックを正規表現で抽出
     const itemBlocks = [...text.matchAll(/<item>([\s\S]*?)<\/item>/gi)].map(m => m[1]);
+
     return itemBlocks.slice(0, 15).map(block => {
+      // title (CDATA or plain)
       const titleM = block.match(/<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>|<title>([\s\S]*?)<\/title>/i);
       let title = (titleM?.[1] ?? titleM?.[2] ?? '').trim();
-      title = title.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
-      title = title.replace(/\s+-\s+[^-]+$/, '').trim();
+      title = title.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"');
+      title = title.replace(/\s+-\s+[^-]+$/, '').trim(); // 「タイトル - 媒体名」除去
+
+      // link
       let link = '';
       const linkM = block.match(/<link>(https?:\/\/[^\s<]+)<\/link>/i);
       if (linkM) link = linkM[1].trim();
-      if (!link) { const guidM = block.match(/<guid[^>]*>(https?:\/\/[^\s<]+)<\/guid>/i); if (guidM) link = guidM[1].trim(); }
+      if (!link) {
+        const guidM = block.match(/<guid[^>]*>(https?:\/\/[^\s<]+)<\/guid>/i);
+        if (guidM) link = guidM[1].trim();
+      }
+
+      // pubDate
       const pubM = block.match(/<pubDate>([\s\S]*?)<\/pubDate>/i);
       const dt = pubM ? new Date(pubM[1].trim()) : new Date();
-      return { title, link: link||'#', dt, src, tag: detectTag(title, src.tag) };
+
+      return { title, link: link || '#', dt, src, tag: detectTag(title, src.tag) };
     }).filter(n => n.title.length > 0);
+
   } catch(e) {
     console.warn('RSS fetch error:', src.label, e);
     return [];
@@ -644,6 +669,93 @@ function getSampleNews() {
   ];
 }
 loadNews();
+
+// ============================================================
+// 話題株ダイジェスト（株探）
+// ============================================================
+async function loadKabutanDigest() {
+  const wrap = document.getElementById('digestWrap');
+  const badge = document.getElementById('digestBadge');
+  try {
+    const rssUrl = 'https://kabutan.jp/rss/news';
+    const proxyUrl = PROXY + encodeURIComponent(rssUrl);
+    const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) });
+    const text = await res.text();
+
+    // itemブロック抽出
+    const itemBlocks = [...text.matchAll(/<item>([\s\S]*?)<\/item>/gi)].map(m => m[1]);
+
+    // 「話題株ダイジェスト」を含む記事だけ抽出
+    const digestItems = itemBlocks.map(block => {
+      const titleM = block.match(/<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>|<title>([\s\S]*?)<\/title>/i);
+      let title = (titleM?.[1] ?? titleM?.[2] ?? '').trim();
+      title = title.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
+      const linkM = block.match(/<link>(https?:\/\/[^\s<]+)<\/link>/i);
+      let link = linkM ? linkM[1].trim() : '';
+      if (!link) {
+        const guidM = block.match(/<guid[^>]*>(https?:\/\/[^\s<]+)<\/guid>/i);
+        if (guidM) link = guidM[1].trim();
+      }
+      const pubM = block.match(/<pubDate>([\s\S]*?)<\/pubDate>/i);
+      const dt = pubM ? new Date(pubM[1].trim()) : new Date();
+      return { title, link, dt };
+    }).filter(n => n.title.includes('話題株ダイジェスト'));
+
+    if (digestItems.length === 0) {
+      badge.textContent = '今週号待ち';
+      wrap.innerHTML = `
+        <div style="font-size:.82rem;color:var(--text-sub);line-height:1.7;padding:4px 0;">
+          今週の話題株ダイジェストはまだ公開されていません。<br>
+          毎週末に株探から自動取得します。
+        </div>
+        <a href="https://kabutan.jp/news/?category=hot_stocks" target="_blank" rel="noopener"
+           style="display:block;margin-top:10px;padding:8px 12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;text-decoration:none;color:#c2410c;font-size:.82rem;font-weight:500;">
+          🔍 株探で確認する ↗
+        </a>`;
+      return;
+    }
+
+    // 最新号を表示
+    const latest = digestItems[0];
+    const dt = latest.dt;
+    const dateStr = `${dt.getFullYear()}/${dt.getMonth()+1}/${dt.getDate()}`;
+    badge.textContent = `最新: ${dateStr}`;
+    badge.style.background = '#fff7ed';
+    badge.style.color = '#c2410c';
+
+    wrap.innerHTML = `
+      <a href="${latest.link}" target="_blank" rel="noopener noreferrer"
+         style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:linear-gradient(135deg,#fff7ed,#fffbeb);border:1px solid #fed7aa;border-radius:10px;text-decoration:none;color:inherit;transition:box-shadow .15s;"
+         onmouseover="this.style.boxShadow='0 4px 12px rgba(0,0,0,.1)'" onmouseout="this.style.boxShadow='none'">
+        <span style="font-size:1.4rem;flex-shrink:0;">📋</span>
+        <div>
+          <div style="font-size:.85rem;font-weight:600;color:#92400e;line-height:1.5;margin-bottom:4px;">${latest.title}</div>
+          <div style="font-size:.73rem;color:#b45309;">${dateStr} 掲載 ↗</div>
+        </div>
+      </a>
+      ${digestItems.length > 1 ? `
+        <div style="margin-top:10px;">
+          <div style="font-size:.72rem;color:var(--text-sub);margin-bottom:6px;font-weight:600;">過去のダイジェスト</div>
+          ${digestItems.slice(1,4).map(item=>{
+            const d = item.dt;
+            return `<a href="${item.link}" target="_blank" rel="noopener" style="display:flex;justify-content:space-between;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);text-decoration:none;color:var(--text-sub);font-size:.78rem;">
+              <span>${item.title.replace('【話題株ダイジェスト】','').trim()}</span>
+              <span style="font-family:monospace;font-size:.7rem;flex-shrink:0;margin-left:8px;">${d.getMonth()+1}/${d.getDate()}</span>
+            </a>`;
+          }).join('')}
+        </div>` : ''}`;
+
+  } catch(e) {
+    console.warn('Digest fetch error:', e);
+    badge.textContent = '取得失敗';
+    wrap.innerHTML = `<div style="font-size:.82rem;color:var(--text-sub);padding:4px 0;">取得できませんでした。</div>
+      <a href="https://kabutan.jp/news/?category=hot_stocks" target="_blank" rel="noopener"
+         style="display:block;margin-top:8px;padding:8px 12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;text-decoration:none;color:#c2410c;font-size:.82rem;">
+        🔍 株探で確認する ↗
+      </a>`;
+  }
+}
+loadKabutanDigest();
 
 // ============================================================
 // TRADINGVIEW CHART
