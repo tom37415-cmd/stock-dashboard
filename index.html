@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>株式ダッシュボード</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f0f4f8;
+    --surface: #ffffff;
+    --surface2: #f8fafc;
+    --border: #e2e8f0;
+    --text: #1a202c;
+    --text-sub: #64748b;
+    --accent: #0ea5e9;
+    --accent2: #10b981;
+    --accent3: #f59e0b;
+    --red: #ef4444;
+    --purple: #8b5cf6;
+    --shadow: 0 1px 3px rgba(0,0,0,0.07), 0 4px 16px rgba(0,0,0,0.05);
+    --shadow-hover: 0 4px 12px rgba(0,0,0,0.12), 0 8px 32px rgba(0,0,0,0.08);
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Noto Sans JP', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* ===== HEADER ===== */
+  header {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 0 24px; height: 60px; display: flex; align-items: center;
+    justify-content: space-between; position: sticky; top: 0; z-index: 100;
+    box-shadow: 0 1px 8px rgba(0,0,0,0.06);
+  }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.05rem; color: var(--text); text-decoration: none; }
+  .logo-icon { width: 32px; height: 32px; background: linear-gradient(135deg, var(--accent), #6366f1); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-size: 16px; }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .header-time { font-family: 'DM Mono', monospace; font-size: 0.82rem; color: var(--text-sub); background: var(--bg); padding: 4px 12px; border-radius: 20px; }
+  .market-status { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; font-weight: 500; }
+  .market-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent2); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)} }
+  .settings-btn { padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border); background: none; font-size: 0.8rem; color: var(--text-sub); cursor: pointer; display: flex; align-items: center; gap: 5px; transition: all .15s; font-family: inherit; }
+  .settings-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ===== TICKER ===== */
+  .ticker-strip { grid-column: 1/-1; background: var(--surface); border-radius: var(--radius); padding: 0 20px; height: 52px; display: flex; align-items: center; overflow: hidden; border: 1px solid var(--border); box-shadow: var(--shadow); }
+  .ticker-label { font-size: 0.68rem; font-weight: 700; color: var(--text-sub); letter-spacing: .12em; white-space: nowrap; margin-right: 16px; flex-shrink: 0; }
+  .ticker-scroll-wrap { overflow: hidden; flex: 1; }
+  .ticker-scroll { display: flex; gap: 32px; animation: tickerMove 50s linear infinite; white-space: nowrap; }
+  @keyframes tickerMove { 0%{transform:translateX(0)}100%{transform:translateX(-50%)} }
+  .ticker-item { display: flex; align-items: center; gap: 8px; font-family: 'DM Mono', monospace; font-size: 0.83rem; }
+  .ticker-name { color: var(--text-sub); font-size: 0.75rem; }
+  .ticker-price { color: var(--text); font-weight: 500; }
+  .ticker-change.up { color: var(--accent2); }
+  .ticker-change.down { color: var(--red); }
+  .ticker-sep { color: var(--border); }
+  .ticker-update { font-size: 0.68rem; color: var(--text-sub); flex-shrink: 0; margin-left: 12px; white-space: nowrap; }
+
+  /* ===== LAYOUT ===== */
+  .main-wrap { max-width: 1440px; margin: 0 auto; padding: 20px 18px; display: grid; grid-template-columns: 1fr 340px; gap: 18px; }
+
+  /* ===== CARD ===== */
+  .card { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); box-shadow: var(--shadow); overflow: hidden; }
+  .card-header { padding: 16px 20px 12px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .card-title { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 0.92rem; }
+  .card-title-icon { width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 13px; }
+  .icon-blue{background:#eff6ff} .icon-green{background:#f0fdf4} .icon-amber{background:#fffbeb} .icon-purple{background:#faf5ff} .icon-red{background:#fff1f2} .icon-teal{background:#f0fdfa}
+  .card-badge { font-size: 0.7rem; font-weight: 600; padding: 2px 9px; border-radius: 20px; }
+  .badge-blue{background:#eff6ff;color:var(--accent)} .badge-green{background:#f0fdf4;color:var(--accent2)} .badge-purple{background:#faf5ff;color:var(--purple)} .badge-amber{background:#fffbeb;color:var(--accent3)}
+
+  /* ===== TABS (shared) ===== */
+  .tab-bar { display: flex; padding: 12px 20px 0; border-bottom: 1px solid var(--border); background: var(--surface2); gap: 0; }
+  .tab-btn { padding: 6px 16px; font-size: 0.8rem; font-weight: 500; color: var(--text-sub); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all .15s; font-family: inherit; background: none; border-top: none; border-left: none; border-right: none; }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-btn:hover:not(.active) { color: var(--text); }
+
+  /* ===== NEWS ===== */
+  .news-section { grid-column: 1; }
+  .news-controls { padding: 10px 20px; border-bottom: 1px solid var(--border); display: flex; gap: 6px; align-items: center; background: var(--surface2); flex-wrap: wrap; }
+  .filter-btn { padding: 4px 12px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface); color: var(--text-sub); font-size: 0.75rem; font-weight: 500; cursor: pointer; transition: all .15s; font-family: inherit; }
+  .filter-btn.active,.filter-btn:hover { background: var(--accent); color: white; border-color: var(--accent); }
+  .filter-trump.active,.filter-trump:hover { background: #dc2626; border-color: #dc2626; color: white; }
+  .filter-mideast.active,.filter-mideast:hover { background: #059669; border-color: #059669; color: white; }
+  .refresh-btn { margin-left: auto; padding: 4px 12px; border-radius: 20px; border: 1px solid var(--border); background: none; color: var(--text-sub); font-size: 0.75rem; cursor: pointer; transition: all .15s; font-family: inherit; }
+  .refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .news-list { max-height: 460px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+  .news-item { padding: 12px 20px; border-bottom: 1px solid var(--border); display: flex; gap: 12px; transition: background .15s; cursor: pointer; text-decoration: none; color: inherit; }
+  .news-item:hover { background: var(--surface2); }
+  .news-item:last-child { border-bottom: none; }
+  .news-src { flex-shrink: 0; width: 52px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.62rem; font-weight: 700; margin-top: 2px; }
+  .src-yahoo{background:#fff0f0;color:#e53e3e} .src-nikkei{background:#fff9e6;color:#c27c00} .src-minkabu{background:#e8f5e9;color:#2e7d32}
+  .news-body { flex: 1; }
+  .news-ttl { font-size: 0.85rem; font-weight: 500; line-height: 1.5; margin-bottom: 4px; }
+  .news-meta { display: flex; gap: 10px; font-size: 0.72rem; color: var(--text-sub); align-items: center; }
+  .news-time { font-family: 'DM Mono', monospace; }
+  .news-tag { padding: 1px 7px; border-radius: 10px; font-size: 0.68rem; font-weight: 500; }
+  .nt-market{background:#eff6ff;color:#2563eb} .nt-us{background:#fdf4ff;color:#9333ea} .nt-macro{background:#fff7ed;color:#ea580c} .nt-sector{background:#f0fdf4;color:#16a34a}
+  .nt-trump{background:#fef2f2;color:#dc2626;font-weight:600} .nt-mideast{background:#f0fdf4;color:#059669;font-weight:600} .nt-world{background:#f0f9ff;color:#0284c7}
+  .src-world{background:#fff0e6;color:#c2410c} .src-bbc{background:#e0e7ff;color:#4338ca} .src-nhk{background:#fce7f3;color:#be185d}
+  .src-trump{background:#fef2f2;color:#dc2626;font-weight:700} .src-mideast{background:#f0fdf4;color:#059669;font-weight:700}
+  .loading-box { padding: 36px; text-align: center; color: var(--text-sub); font-size: 0.88rem; }
+  .spinner { width: 26px; height: 26px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto 10px; }
+  @keyframes spin { to{transform:rotate(360deg)} }
+
+  /* ===== CHART ===== */
+  .chart-section { grid-column: 1; }
+  .widget-content { padding: 18px 20px; }
+  .tradingview-container { width: 100%; border-radius: 8px; overflow: hidden; }
+
+  /* ===== WATCHLIST ===== */
+  .watchlist-section { grid-column: 1; }
+  .watch-search-bar { padding: 12px 20px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; background: var(--surface2); }
+  .watch-input { flex: 1; padding: 7px 12px; border-radius: 8px; border: 1.5px solid var(--border); font-size: 0.85rem; font-family: inherit; color: var(--text); outline: none; background: var(--surface); transition: border-color .15s; }
+  .watch-input:focus { border-color: var(--accent); }
+  .watch-add-btn { padding: 7px 16px; border-radius: 8px; border: none; background: var(--accent); color: white; font-size: 0.83rem; font-weight: 600; cursor: pointer; font-family: inherit; white-space: nowrap; }
+  .watch-table { width: 100%; border-collapse: collapse; }
+  .watch-table th { padding: 8px 20px; font-size: 0.7rem; font-weight: 600; color: var(--text-sub); text-align: left; border-bottom: 1px solid var(--border); background: var(--surface2); letter-spacing: .06em; }
+  .watch-table th:not(:first-child) { text-align: right; }
+  .watch-table td { padding: 10px 20px; font-size: 0.84rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .watch-table td:not(:first-child) { text-align: right; font-family: 'DM Mono', monospace; }
+  .watch-table tr:last-child td { border-bottom: none; }
+  .watch-table tr:hover td { background: var(--surface2); }
+  .watch-ticker-name { font-weight: 600; font-size: 0.88rem; }
+  .watch-ticker-code { font-size: 0.72rem; color: var(--text-sub); font-family: 'DM Mono', monospace; }
+  .watch-price { font-weight: 500; }
+  .watch-change.up { color: var(--accent2); }
+  .watch-change.down { color: var(--red); }
+  .watch-actions { display: flex; gap: 6px; justify-content: flex-end; }
+  .watch-action-btn { padding: 3px 8px; border-radius: 5px; border: 1px solid var(--border); background: none; font-size: 0.72rem; cursor: pointer; color: var(--text-sub); transition: all .15s; font-family: inherit; }
+  .watch-action-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .watch-action-btn.del:hover { border-color: var(--red); color: var(--red); }
+  .watch-sn-btn { background: #faf5ff; border-color: #d8b4fe; color: var(--purple); }
+  .watch-sn-btn:hover { background: var(--purple) !important; color: white !important; border-color: var(--purple) !important; }
+  .watch-loading { padding: 20px; text-align: center; color: var(--text-sub); font-size: 0.82rem; }
+
+  /* ===== MEMO ===== */
+  .memo-section { grid-column: 1; }
+  .memo-area-wrap { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; background: var(--surface2); }
+  .memo-ticker-input { width: 100px; padding: 7px 10px; border-radius: 8px; border: 1.5px solid var(--border); font-size: 0.83rem; font-family: 'DM Mono', monospace; outline: none; background: var(--surface); transition: border-color .15s; }
+  .memo-ticker-input:focus { border-color: var(--purple); }
+  .memo-text-input { flex: 1; padding: 7px 12px; border-radius: 8px; border: 1.5px solid var(--border); font-size: 0.83rem; font-family: inherit; outline: none; background: var(--surface); transition: border-color .15s; resize: none; }
+  .memo-text-input:focus { border-color: var(--purple); }
+  .memo-save-btn { padding: 7px 14px; border-radius: 8px; border: none; background: var(--purple); color: white; font-size: 0.83rem; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .memo-list { max-height: 320px; overflow-y: auto; scrollbar-width: thin; }
+  .memo-item { padding: 11px 20px; border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: flex-start; transition: background .15s; }
+  .memo-item:hover { background: var(--surface2); }
+  .memo-item:last-child { border-bottom: none; }
+  .memo-code-tag { flex-shrink: 0; padding: 2px 9px; background: #faf5ff; border: 1px solid #d8b4fe; border-radius: 5px; font-size: 0.72rem; font-weight: 600; color: var(--purple); font-family: 'DM Mono', monospace; cursor: pointer; transition: all .15s; }
+  .memo-code-tag:hover { background: var(--purple); color: white; }
+  .memo-body { flex: 1; font-size: 0.84rem; line-height: 1.5; color: var(--text); }
+  .memo-meta { font-size: 0.7rem; color: var(--text-sub); margin-top: 3px; font-family: 'DM Mono', monospace; }
+  .memo-del { flex-shrink: 0; padding: 3px 6px; border: 1px solid var(--border); border-radius: 5px; background: none; color: var(--text-sub); font-size: 0.7rem; cursor: pointer; transition: all .15s; }
+  .memo-del:hover { border-color: var(--red); color: var(--red); }
+  .memo-sn-badge { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; background: #faf5ff; border-radius: 10px; font-size: 0.68rem; color: var(--purple); font-weight: 500; margin-left: 6px; }
+
+  /* ===== SIDEBAR ===== */
+  .sidebar { grid-column: 2; grid-row: 2/8; display: flex; flex-direction: column; gap: 18px; }
+
+  /* ===== YOUTUBE ===== */
+  .yt-list { padding: 4px 0; }
+  .yt-item { display: flex; align-items: center; gap: 10px; padding: 10px 18px; text-decoration: none; color: inherit; transition: background .15s; }
+  .yt-item:hover { background: var(--surface2); }
+  .yt-thumb { width: 68px; height: 42px; border-radius: 6px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 20px; position: relative; overflow: hidden; }
+  .yt-play-overlay { position: absolute; inset: 0; background: rgba(0,0,0,.28); display: flex; align-items: center; justify-content: center; color: white; font-size: 16px; opacity: 0; transition: opacity .15s; }
+  .yt-item:hover .yt-play-overlay { opacity: 1; }
+  .yt-info { flex: 1; min-width: 0; }
+  .yt-title { font-size: 0.8rem; font-weight: 500; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .yt-channel { font-size: 0.7rem; color: var(--text-sub); margin-top: 2px; }
+  .add-dashed-btn { margin: 8px 18px 12px; width: calc(100% - 36px); padding: 7px; border-radius: 8px; border: 1.5px dashed var(--border); background: none; color: var(--text-sub); font-size: 0.8rem; cursor: pointer; transition: all .15s; font-family: inherit; }
+  .add-dashed-btn:hover { border-color: var(--accent); color: var(--accent); background: #eff6ff; }
+
+  /* ===== LINKS ===== */
+  .links-grid { padding: 14px 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  .link-chip { display: flex; align-items: center; gap: 7px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface2); text-decoration: none; color: var(--text); font-size: 0.78rem; font-weight: 500; transition: all .15s; }
+  .link-chip:hover { border-color: var(--accent); background: #eff6ff; color: var(--accent); transform: translateY(-1px); box-shadow: var(--shadow); }
+
+  /* ===== STOCKNOTE PANEL ===== */
+  .sn-panel { }
+  .sn-header-btn { display: flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 7px; border: 1px solid #d8b4fe; background: #faf5ff; color: var(--purple); font-size: 0.78rem; font-weight: 600; cursor: pointer; text-decoration: none; transition: all .15s; }
+  .sn-header-btn:hover { background: var(--purple); color: white; }
+  .sn-search-bar { padding: 10px 18px; border-bottom: 1px solid var(--border); display: flex; gap: 6px; background: var(--surface2); }
+  .sn-search-input { flex: 1; padding: 6px 10px; border-radius: 7px; border: 1.5px solid var(--border); font-size: 0.8rem; font-family: 'DM Mono', monospace; outline: none; background: var(--surface); transition: border-color .15s; }
+  .sn-search-input:focus { border-color: var(--purple); }
+  .sn-search-btn { padding: 6px 12px; border-radius: 7px; border: none; background: var(--purple); color: white; font-size: 0.78rem; cursor: pointer; font-family: inherit; }
+  .sn-memo-list { max-height: 300px; overflow-y: auto; scrollbar-width: thin; }
+  .sn-memo-item { padding: 10px 18px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background .15s; }
+  .sn-memo-item:hover { background: var(--surface2); }
+  .sn-memo-item:last-child { border-bottom: none; }
+  .sn-memo-top { display: flex; align-items: center; gap: 7px; margin-bottom: 3px; }
+  .sn-code { font-family: 'DM Mono', monospace; font-size: 0.75rem; font-weight: 600; color: var(--purple); background: #faf5ff; padding: 1px 7px; border-radius: 4px; }
+  .sn-title { font-size: 0.82rem; font-weight: 500; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sn-body { font-size: 0.78rem; color: var(--text-sub); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .sn-date { font-size: 0.68rem; color: var(--text-sub); margin-top: 3px; font-family: 'DM Mono', monospace; }
+  .sn-no-config { padding: 20px; text-align: center; font-size: 0.83rem; color: var(--text-sub); line-height: 1.7; }
+
+  /* ===== SETTINGS MODAL ===== */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 200; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity .2s; }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+  .modal { background: var(--surface); border-radius: 16px; padding: 26px; width: 460px; max-width: 95vw; box-shadow: 0 20px 60px rgba(0,0,0,.2); transform: translateY(16px); transition: transform .2s; max-height: 90vh; overflow-y: auto; }
+  .modal-overlay.open .modal { transform: translateY(0); }
+  .modal-title { font-size: 1rem; font-weight: 700; margin-bottom: 18px; display: flex; align-items: center; gap: 8px; }
+  .modal-section { margin-bottom: 18px; }
+  .modal-label { font-size: 0.78rem; font-weight: 600; color: var(--text-sub); margin-bottom: 6px; letter-spacing: .05em; }
+  .modal-input { width: 100%; padding: 9px 12px; border-radius: 8px; border: 1.5px solid var(--border); font-size: 0.85rem; font-family: inherit; color: var(--text); outline: none; transition: border-color .15s; background: var(--surface); margin-bottom: 8px; }
+  .modal-input:focus { border-color: var(--accent); }
+  .modal-input.purple:focus { border-color: var(--purple); }
+  .modal-hint { font-size: 0.73rem; color: var(--text-sub); line-height: 1.6; background: var(--surface2); border-radius: 7px; padding: 8px 12px; margin-bottom: 8px; }
+  .modal-divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+  .modal-btns { display: flex; gap: 8px; justify-content: flex-end; }
+  .btn-cancel { padding: 8px 18px; border-radius: 8px; border: 1px solid var(--border); background: none; color: var(--text-sub); font-size: 0.83rem; cursor: pointer; font-family: inherit; }
+  .btn-primary { padding: 8px 18px; border-radius: 8px; border: none; background: var(--accent); color: white; font-size: 0.83rem; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .btn-purple { background: var(--purple); }
+
+  /* ===== RESPONSIVE ===== */
+  @media (max-width: 960px) {
+    .main-wrap { grid-template-columns: 1fr; }
+    .sidebar { grid-column: 1; grid-row: auto; }
+    .ticker-strip { grid-column: 1; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <a class="logo" href="#">
+    <div class="logo-icon">📈</div>
+    株式ダッシュボード
+  </a>
+  <div class="header-right">
+    <div class="market-status">
+      <div class="market-dot" id="mktDot"></div>
+      <span id="mktTxt" style="font-size:.78rem;font-weight:500">確認中...</span>
+    </div>
+    <div class="header-time" id="hdrTime">--:--:--</div>
+    <button class="settings-btn" onclick="openSettings()">⚙ 設定</button>
+  </div>
+</header>
+
+<div class="main-wrap">
+
+  <!-- TICKER -->
+  <div class="ticker-strip" style="grid-column:1/-1">
+    <span class="ticker-label">LIVE</span>
+    <div class="ticker-scroll-wrap">
+      <div class="ticker-scroll" id="tickerScroll"></div>
+    </div>
+    <span class="ticker-update" id="tickerUpdateTime">--</span>
+  </div>
+
+  <!-- NEWS -->
+  <div class="card news-section">
+    <div class="card-header">
+      <div class="card-title"><div class="card-title-icon icon-blue">📰</div>注目ニュース</div>
+      <span class="card-badge badge-blue" id="newsCount">読込中</span>
+    </div>
+    <div class="news-controls">
+      <button class="filter-btn active" onclick="filterNews('all',this)">すべて</button>
+      <button class="filter-btn" onclick="filterNews('market',this)">国内</button>
+      <button class="filter-btn" onclick="filterNews('us',this)">米国</button>
+      <button class="filter-btn" onclick="filterNews('macro',this)">マクロ</button>
+      <button class="filter-btn" onclick="filterNews('sector',this)">セクター</button>
+      <button class="filter-btn filter-trump" onclick="filterNews('trump',this)">🇺🇸 トランプ</button>
+      <button class="filter-btn filter-mideast" onclick="filterNews('mideast',this)">🌏 中東</button>
+      <button class="refresh-btn" onclick="loadNews()">🔄 更新</button>
+    </div>
+    <div class="news-list" id="newsList"><div class="loading-box"><div class="spinner"></div>取得中...</div></div>
+  </div>
+
+  <!-- CHART -->
+  <div class="card chart-section">
+    <div class="card-header">
+      <div class="card-title"><div class="card-title-icon icon-green">📊</div>株価チャート</div>
+    </div>
+    <div class="tab-bar">
+      <button class="tab-btn active" onclick="switchChart('INDEX:NKY',this)">日経225</button>
+      <button class="tab-btn" onclick="switchChart('TSE:TOPIX',this)">TOPIX</button>
+      <button class="tab-btn" onclick="switchChart('SP:SPX',this)">S&P500</button>
+      <button class="tab-btn" onclick="switchChart('NASDAQ:NDX',this)">NASDAQ</button>
+      <button class="tab-btn" onclick="switchChart('FX:USDJPY',this)">ドル円</button>
+      <button class="tab-btn" onclick="switchChart('TVC:GOLD',this)">金(GOLD)</button>
+    </div>
+    <div class="widget-content">
+      <div class="tradingview-container" id="tvContainer">
+        <div class="tradingview-widget-container">
+          <div id="tv_main"></div>
+          <script src="https://s3.tradingview.com/tv.js"></script>
+          <script>
+            new TradingView.widget({ width:"100%", height:360, symbol:"INDEX:NKY", interval:"D", timezone:"Asia/Tokyo", theme:"light", style:"1", locale:"ja", toolbar_bg:"#f8fafc", enable_publishing:false, hide_legend:false, save_image:false, container_id:"tv_main" });
+          </script>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- WATCHLIST -->
+  <div class="card watchlist-section">
+    <div class="card-header">
+      <div class="card-title"><div class="card-title-icon icon-teal">👁</div>ウォッチリスト</div>
+      <span class="card-badge badge-green" id="watchCount">0銘柄</span>
+    </div>
+    <div class="watch-search-bar">
+      <input class="watch-input" id="watchTickerInput" placeholder="コード or 銘柄名（例: 7203, トヨタ）" onkeydown="if(event.key==='Enter')addWatch()">
+      <button class="watch-add-btn" onclick="addWatch()">＋ 追加</button>
+    </div>
+    <div id="watchListWrap">
+      <div class="loading-box">ウォッチリストを読込中...</div>
+    </div>
+  </div>
+
+  <!-- MEMO -->
+  <div class="card memo-section">
+    <div class="card-header">
+      <div class="card-title"><div class="card-title-icon icon-purple">📝</div>投資メモ</div>
+      <span class="card-badge badge-purple" id="memoCount">0件</span>
+    </div>
+    <div class="memo-area-wrap">
+      <input class="memo-ticker-input" id="memoTicker" placeholder="銘柄コード" maxlength="6">
+      <textarea class="memo-text-input" id="memoText" placeholder="メモを入力..." rows="2"></textarea>
+      <button class="memo-save-btn" onclick="saveMemo()">保存</button>
+    </div>
+    <div class="memo-list" id="memoList"><div class="loading-box">メモを読込中...</div></div>
+  </div>
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+
+    <!-- STOCKNOTE PANEL -->
+    <div class="card sn-panel">
+      <div class="card-header">
+        <div class="card-title"><div class="card-title-icon icon-purple">🗒</div>StockNote</div>
+        <a class="sn-header-btn" id="snOpenBtn" href="#" target="_blank">開く →</a>
+      </div>
+      <div class="sn-search-bar">
+        <input class="sn-search-input" id="snSearchInput" placeholder="銘柄コードで検索" onkeydown="if(event.key==='Enter')snSearch()">
+        <button class="sn-search-btn" onclick="snSearch()">検索</button>
+      </div>
+      <div class="sn-memo-list" id="snMemoList">
+        <div class="sn-no-config">⚙ 設定からSupabaseのURL・APIキーと<br>StockNoteのURLを入力してください</div>
+      </div>
+    </div>
+
+    <!-- YOUTUBE -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><div class="card-title-icon icon-amber">▶️</div>YouTubeリンク集</div>
+        <span class="card-badge badge-amber" id="ytCount">0本</span>
+      </div>
+      <div class="yt-list" id="ytList"></div>
+      <button class="add-dashed-btn" onclick="openYtModal()">＋ 動画を追加</button>
+    </div>
+
+    <!-- LINKS -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><div class="card-title-icon icon-blue">🔗</div>お気に入りサイト</div>
+      </div>
+      <div class="links-grid" id="linksGrid"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div class="modal-overlay" id="settingsModal" onclick="if(event.target===this)closeSettings()">
+  <div class="modal">
+    <div class="modal-title">⚙ 設定</div>
+
+    <div class="modal-section">
+      <div class="modal-label">🗒 STOCKNOTE URL</div>
+      <div class="modal-hint">StockNote（stock-dashboard）のNetlifyのURLを入力してください。<br>例: https://your-stocknote.netlify.app</div>
+      <input class="modal-input" id="cfgSnUrl" placeholder="https://your-stocknote.netlify.app">
+    </div>
+
+    <hr class="modal-divider">
+
+    <div class="modal-section">
+      <div class="modal-label">🗄 SUPABASE 設定（ウォッチリスト・メモ・StockNote連携）</div>
+      <div class="modal-hint">StockNoteと同じSupabaseプロジェクトのURL・APIキーを入力してください。<br>必要なテーブル: <b>watchlist</b>（ticker, name, added_at）、<b>memos</b>（ticker, body, created_at）</div>
+      <input class="modal-input purple" id="cfgSbUrl" placeholder="https://xxxx.supabase.co">
+      <input class="modal-input purple" id="cfgSbKey" placeholder="eyJhbGci... (anon key)">
+    </div>
+
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeSettings()">キャンセル</button>
+      <button class="btn-primary btn-purple" onclick="saveSettings()">保存して反映</button>
+    </div>
+  </div>
+</div>
+
+<!-- YT MODAL -->
+<div class="modal-overlay" id="ytModal" onclick="if(event.target===this)closeYtModal()">
+  <div class="modal">
+    <div class="modal-title">▶ YouTube動画を追加</div>
+    <div class="modal-label">YouTube URL</div>
+    <input class="modal-input" id="ytUrl" placeholder="https://www.youtube.com/watch?v=...">
+    <div class="modal-label">タイトル</div>
+    <input class="modal-input" id="ytTitle" placeholder="動画タイトル">
+    <div class="modal-label">チャンネル名</div>
+    <input class="modal-input" id="ytChannel" placeholder="チャンネル名">
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeYtModal()">キャンセル</button>
+      <button class="btn-primary" onclick="addYtLink()">追加</button>
+    </div>
+  </div>
+</div>
+
+<!-- LINK MODAL -->
+<div class="modal-overlay" id="linkModal" onclick="if(event.target===this)closeLinkModal()">
+  <div class="modal">
+    <div class="modal-title">🔗 サイトを追加</div>
+    <div class="modal-label">サイト名</div>
+    <input class="modal-input" id="lkName" placeholder="例: 東洋経済オンライン">
+    <div class="modal-label">URL</div>
+    <input class="modal-input" id="lkUrl" placeholder="https://...">
+    <div class="modal-label">アイコン（絵文字）</div>
+    <input class="modal-input" id="lkIcon" placeholder="🌐" maxlength="2">
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeLinkModal()">キャンセル</button>
+      <button class="btn-primary" onclick="addLinkItem()">追加</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// CONFIG
+// ============================================================
+let CFG = {};
+function loadCfg() {
+  try { CFG = JSON.parse(localStorage.getItem('dash_cfg') || '{}'); } catch { CFG = {}; }
+  if (CFG.snUrl) document.getElementById('snOpenBtn').href = CFG.snUrl;
+}
+function saveSettings() {
+  CFG.snUrl = document.getElementById('cfgSnUrl').value.trim().replace(/\/$/, '');
+  CFG.sbUrl = document.getElementById('cfgSbUrl').value.trim().replace(/\/$/, '');
+  CFG.sbKey = document.getElementById('cfgSbKey').value.trim();
+  localStorage.setItem('dash_cfg', JSON.stringify(CFG));
+  if (CFG.snUrl) document.getElementById('snOpenBtn').href = CFG.snUrl;
+  closeSettings();
+  initSupabase();
+}
+function openSettings() {
+  document.getElementById('cfgSnUrl').value = CFG.snUrl || '';
+  document.getElementById('cfgSbUrl').value = CFG.sbUrl || '';
+  document.getElementById('cfgSbKey').value = CFG.sbKey || '';
+  document.getElementById('settingsModal').classList.add('open');
+}
+function closeSettings() { document.getElementById('settingsModal').classList.remove('open'); }
+
+// ============================================================
+// CLOCK & MARKET STATUS
+// ============================================================
+function updateClock() {
+  const jst = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+  const pad = n => String(n).padStart(2,'0');
+  document.getElementById('hdrTime').textContent = `${pad(jst.getHours())}:${pad(jst.getMinutes())}:${pad(jst.getSeconds())} JST`;
+  const d = jst.getDay(), h = jst.getHours(), m = jst.getMinutes(), t = h*60+m;
+  const wk = d>=1&&d<=5;
+  const open = wk && ((t>=9*60&&t<11*60+30)||(t>=12*60+30&&t<15*60+30));
+  const dot = document.getElementById('mktDot'), txt = document.getElementById('mktTxt');
+  if (open) { dot.style.background='#10b981'; dot.style.animation='pulse 2s infinite'; txt.textContent='東証 取引中'; txt.style.color='#10b981'; }
+  else { dot.style.background='#94a3b8'; dot.style.animation='none'; txt.textContent='東証 閉場中'; txt.style.color='#94a3b8'; }
+}
+setInterval(updateClock, 1000); updateClock();
+
+// ============================================================
+// TICKER (Yahoo Finance v8 via allorigins proxy)
+// ============================================================
+const TICKER_SYMBOLS = [
+  { sym: '%5EN225', name: '日経225', fmt: n => n.toLocaleString('ja-JP',{maximumFractionDigits:0}) },
+  { sym: '%5ETOPX', name: 'TOPIX', fmt: n => n.toLocaleString('ja-JP',{maximumFractionDigits:2}) },
+  { sym: '%5EGSPC', name: 'S&P500', fmt: n => n.toLocaleString('en-US',{maximumFractionDigits:2}) },
+  { sym: '%5EIXIC', name: 'NASDAQ', fmt: n => n.toLocaleString('en-US',{maximumFractionDigits:2}) },
+  { sym: 'USDJPY%3DX', name: 'ドル円', fmt: n => n.toFixed(2) },
+  { sym: 'EURJPY%3DX', name: 'ユーロ円', fmt: n => n.toFixed(2) },
+  { sym: 'CL%3DF', name: 'WTI原油', fmt: n => '$'+n.toFixed(2) },
+  { sym: 'GC%3DF', name: '金(GOLD)', fmt: n => '$'+n.toLocaleString('en-US',{maximumFractionDigits:0}) },
+  { sym: '%5EVIX', name: 'VIX', fmt: n => n.toFixed(2) },
+  { sym: 'BTC-USD', name: 'BTC/USD', fmt: n => '$'+n.toLocaleString('en-US',{maximumFractionDigits:0}) },
+];
+
+let tickerLive = [];
+
+async function fetchOneTicker(item) {
+  const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${item.sym}?interval=1d&range=2d`)}`;
+  try {
+    const res = await fetch(proxy, { signal: AbortSignal.timeout(6000) });
+    const data = await res.json();
+    const result = JSON.parse(data.contents)?.chart?.result?.[0];
+    if (!result) return null;
+    const meta = result.meta;
+    const price = meta.regularMarketPrice;
+    const prev = meta.chartPreviousClose || meta.previousClose;
+    const chg = price - prev;
+    const pct = (chg / prev * 100);
+    return { name: item.name, price: item.fmt(price), change: (pct>=0?'+':'')+pct.toFixed(2)+'%', up: pct>=0 };
+  } catch { return null; }
+}
+
+async function fetchAllTickers() {
+  const results = await Promise.all(TICKER_SYMBOLS.map(fetchOneTicker));
+  tickerLive = results.filter(Boolean);
+  if (tickerLive.length > 0) renderTicker(tickerLive);
+  const now = new Date();
+  document.getElementById('tickerUpdateTime').textContent = `更新: ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`;
+  setTimeout(fetchAllTickers, 60000);
+}
+
+function renderTicker(data) {
+  const items = [...data, ...data].map(t => `
+    <div class="ticker-item">
+      <span class="ticker-name">${t.name}</span>
+      <span class="ticker-price">${t.price}</span>
+      <span class="ticker-change ${t.up?'up':'down'}">${t.change}</span>
+      <span class="ticker-sep">·</span>
+    </div>
+  `).join('');
+  document.getElementById('tickerScroll').innerHTML = items;
+}
+
+// Fallback static data while loading
+renderTicker([
+  {name:'日経225',price:'--',change:'取得中',up:true},{name:'TOPIX',price:'--',change:'取得中',up:true},
+  {name:'S&P500',price:'--',change:'取得中',up:true},{name:'ドル円',price:'--',change:'取得中',up:true},
+]);
+fetchAllTickers();
+
+// ============================================================
+// NEWS (Google News RSS — CORSフリー、プロキシ不要)
+// ============================================================
+
+// Google News RSS: hl=ja&gl=JP&ceid=JP:ja で日本語、topic別
+const RSS_SOURCES = [
+  { url:'https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRGx6TVdZU0FtcGhHZ0pLVUNnQVAB?hl=ja&gl=JP&ceid=JP:ja', label:'経済', cls:'src-yahoo', tag:'market' },
+  { url:'https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRGx6TVdZU0FtcGhHZ0pLVUNnQVAB?hl=ja&gl=JP&ceid=JP:ja', label:'ビジネス', cls:'src-nikkei', tag:'macro' },
+  { url:'https://news.google.com/rss/search?q=%E6%97%A5%E6%9C%AC%E6%A0%AA+%E6%A0%AA%E4%BE%A1&hl=ja&gl=JP&ceid=JP:ja', label:'国内株', cls:'src-minkabu', tag:'market' },
+  { url:'https://news.google.com/rss/search?q=%E7%B1%B3%E5%9B%BD%E6%A0%AA+%E3%83%8A%E3%82%B9%E3%83%80%E3%83%83%E3%82%AF+%E3%82%A6%E3%82%A9%E3%83%BC%E3%83%AB%E8%A1%97&hl=ja&gl=JP&ceid=JP:ja', label:'米国株', cls:'src-bbc', tag:'us' },
+  { url:'https://news.google.com/rss/search?q=%E3%83%88%E3%83%A9%E3%83%B3%E3%83%97+%E5%85%B3%E7%A8%8E+%E7%B1%B3%E5%9B%BD%E5%A4%A7%E7%B5%B1%E9%A0%98&hl=ja&gl=JP&ceid=JP:ja', label:'🇺🇸', cls:'src-trump', tag:'trump' },
+  { url:'https://news.google.com/rss/search?q=%E4%B8%AD%E6%9D%B1+%E3%82%AC%E3%82%B6+%E3%82%A4%E3%82%B9%E3%83%A9%E3%82%A8%E3%83%AB+%E3%82%A4%E3%83%A9%E3%83%B3&hl=ja&gl=JP&ceid=JP:ja', label:'🌏', cls:'src-mideast', tag:'mideast' },
+  { url:'https://news.google.com/rss/search?q=%E6%97%A5%E9%8A%80+%E9%87%91%E5%88%A9+%E7%82%BA%E6%9B%BF+%E7%B5%8C%E6%B8%88&hl=ja&gl=JP&ceid=JP:ja', label:'マクロ', cls:'src-nhk', tag:'macro' },
+];
+
+const TAG_INFO = {
+  market:{label:'国内',cls:'nt-market'},
+  us:{label:'米国',cls:'nt-us'},
+  macro:{label:'マクロ',cls:'nt-macro'},
+  sector:{label:'セクター',cls:'nt-sector'},
+  trump:{label:'トランプ',cls:'nt-trump'},
+  mideast:{label:'中東',cls:'nt-mideast'},
+  world:{label:'国際',cls:'nt-world'},
+};
+
+const TRUMP_KW = ['トランプ','Trump','TRUMP','関税','tariff','Tariff','米大統領','ホワイトハウス','MAGA'];
+const MIDEAST_KW = ['中東','ガザ','Gaza','イスラエル','Israel','イラン','Iran','レバノン','ヒズボラ','ハマス','Hamas','パレスチナ','シリア','フーシ','Houthi','紅海','停戦'];
+
+function detectTag(title, defaultTag) {
+  if (TRUMP_KW.some(k => title.includes(k))) return 'trump';
+  if (MIDEAST_KW.some(k => title.includes(k))) return 'mideast';
+  return defaultTag;
+}
+
+let allNews=[], newsFilter='all';
+
+function timeAgo(dt) {
+  const s=(Date.now()-dt)/1000;
+  if(s<60) return 'たった今'; if(s<3600) return Math.floor(s/60)+'分前';
+  if(s<86400) return Math.floor(s/3600)+'時間前'; return Math.floor(s/86400)+'日前';
+}
+
+async function fetchRSS(src) {
+  try {
+    const r = await fetch(src.url, { signal: AbortSignal.timeout(10000) });
+    const text = await r.text();
+    // itemブロックを正規表現で抽出
+    const itemBlocks = [...text.matchAll(/<item>([\s\S]*?)<\/item>/gi)].map(m => m[1]);
+    return itemBlocks.slice(0, 15).map(block => {
+      // title (CDATA or plain)
+      const titleM = block.match(/<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>|<title>([\s\S]*?)<\/title>/i);
+      let title = (titleM?.[1] ?? titleM?.[2] ?? '').trim();
+      title = title.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"');
+      // Google Newsのtitleは「記事タイトル - 媒体名」形式なので媒体名を除去
+      title = title.replace(/\s+-\s+[^-]+$/, '').trim();
+
+      // link (Google Newsは<link>がCDATAなし plain text)
+      let link = '';
+      const linkM = block.match(/<link>(https?:\/\/[^\s<]+)<\/link>/i);
+      if (linkM) link = linkM[1].trim();
+      if (!link) {
+        const guidM = block.match(/<guid[^>]*>(https?:\/\/[^\s<]+)<\/guid>/i);
+        if (guidM) link = guidM[1].trim();
+      }
+
+      // pubDate
+      const pubM = block.match(/<pubDate>([\s\S]*?)<\/pubDate>/i);
+      const dt = pubM ? new Date(pubM[1].trim()) : new Date();
+
+      return { title, link: link || '#', dt, src, tag: detectTag(title, src.tag) };
+    }).filter(n => n.title.length > 0);
+  } catch(e) {
+    console.warn('RSS fetch error:', src.label, e);
+    return [];
+  }
+}
+
+function renderNews(filter) {
+  newsFilter = filter;
+  const list = filter === 'all' ? allNews : allNews.filter(n => n.tag === filter);
+  const el = document.getElementById('newsList');
+  document.getElementById('newsCount').textContent = list.length + '件';
+  if (!list.length) { el.innerHTML = '<div class="loading-box">該当ニュースなし</div>'; return; }
+  el.innerHTML = list.map(n => {
+    const tag = TAG_INFO[n.tag] || TAG_INFO.market;
+    const hasLink = n.link && n.link !== '#';
+    return `<a class="news-item" href="${n.link}" target="_blank" rel="noopener noreferrer">
+      <span class="news-src ${n.src.cls}">${n.src.label}</span>
+      <div class="news-body">
+        <div class="news-ttl">${n.title}${hasLink ? ' <span style="font-size:.7rem;color:var(--text-sub)">↗</span>' : ''}</div>
+        <div class="news-meta"><span class="news-time">${timeAgo(n.dt)}</span><span class="news-tag ${tag.cls}">${tag.label}</span></div>
+      </div></a>`;
+  }).join('');
+}
+
+async function loadNews() {
+  document.getElementById('newsList').innerHTML = '<div class="loading-box"><div class="spinner"></div>ニュース取得中...</div>';
+  const results = await Promise.all(RSS_SOURCES.map(fetchRSS));
+  // 重複タイトル除去
+  const seen = new Set();
+  allNews = results.flat().filter(n => {
+    if (seen.has(n.title)) return false;
+    seen.add(n.title); return true;
+  }).sort((a, b) => b.dt - a.dt);
+  if (!allNews.length) allNews = getSampleNews();
+  renderNews(newsFilter);
+}
+function filterNews(tag,btn) {
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active'); renderNews(tag);
+}
+function getSampleNews() {
+  return [
+    {title:'日銀、金融政策の現状維持を決定',link:'#',dt:new Date(Date.now()-20*60000),src:RSS_SOURCES[1]},
+    {title:'トヨタが通期業績予想を上方修正、円安が追い風',link:'#',dt:new Date(Date.now()-50*60000),src:RSS_SOURCES[0]},
+    {title:'米FRB議長、利下げ時期について慎重な見方',link:'#',dt:new Date(Date.now()-80*60000),src:RSS_SOURCES[2]},
+    {title:'半導体関連株が急伸　AI需要の拡大が背景',link:'#',dt:new Date(Date.now()-120*60000),src:RSS_SOURCES[0]},
+    {title:'ドル円、150円台を回復　日米金利差に注目',link:'#',dt:new Date(Date.now()-160*60000),src:RSS_SOURCES[2]},
+  ];
+}
+loadNews();
+
+// ============================================================
+// TRADINGVIEW CHART
+// ============================================================
+function switchChart(sym,btn) {
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
+  const cid='tv_'+Date.now();
+  document.getElementById('tvContainer').innerHTML=`<div class="tradingview-widget-container"><div id="${cid}"></div></div>`;
+  function doCreate() {
+    new TradingView.widget({width:"100%",height:360,symbol:sym,interval:"D",timezone:"Asia/Tokyo",theme:"light",style:"1",locale:"ja",toolbar_bg:"#f8fafc",enable_publishing:false,hide_legend:false,save_image:false,container_id:cid});
+  }
+  if(window.TradingView) { doCreate(); }
+  else {
+    const s=document.createElement('script'); s.src='https://s3.tradingview.com/tv.js';
+    s.onload=doCreate; document.getElementById('tvContainer').appendChild(s);
+  }
+}
+
+// ============================================================
+// SUPABASE HELPER
+// ============================================================
+async function sbFetch(path, opts={}) {
+  if(!CFG.sbUrl||!CFG.sbKey) return null;
+  const url = CFG.sbUrl+'/rest/v1/'+path;
+  const headers = { 'apikey':CFG.sbKey, 'Authorization':'Bearer '+CFG.sbKey, 'Content-Type':'application/json', 'Prefer':'return=representation', ...opts.headers };
+  try {
+    const res = await fetch(url,{...opts,headers});
+    if(!res.ok) { console.warn('Supabase error',res.status,await res.text()); return null; }
+    const ct = res.headers.get('content-type')||'';
+    if(ct.includes('json') && res.status!==204) return await res.json();
+    return true;
+  } catch(e) { console.error(e); return null; }
+}
+
+// ============================================================
+// WATCHLIST
+// ============================================================
+let watchList = [];
+
+async function loadWatchList() {
+  if(!CFG.sbUrl||!CFG.sbKey) {
+    watchList = JSON.parse(localStorage.getItem('watchlist_local')||'[]');
+    renderWatchList(); return;
+  }
+  const data = await sbFetch('watchlist?select=*&order=added_at.desc');
+  if(data) { watchList = data; renderWatchList(); }
+  else { watchList = []; renderWatchList(); }
+}
+
+async function addWatch() {
+  const val = document.getElementById('watchTickerInput').value.trim();
+  if(!val) return;
+  // Resolve name via Yahoo Finance
+  const name = await resolveTickerName(val);
+  const item = { ticker: val.toUpperCase(), name: name||val, added_at: new Date().toISOString() };
+
+  if(CFG.sbUrl&&CFG.sbKey) {
+    const res = await sbFetch('watchlist', { method:'POST', body:JSON.stringify(item) });
+    if(res) { watchList.unshift(Array.isArray(res)?res[0]:item); }
+  } else {
+    watchList.unshift(item);
+    localStorage.setItem('watchlist_local', JSON.stringify(watchList));
+  }
+  document.getElementById('watchTickerInput').value='';
+  renderWatchList();
+  fetchWatchPrices();
+}
+
+async function removeWatch(ticker) {
+  if(CFG.sbUrl&&CFG.sbKey) await sbFetch(`watchlist?ticker=eq.${encodeURIComponent(ticker)}`, { method:'DELETE' });
+  watchList = watchList.filter(w=>w.ticker!==ticker);
+  if(!CFG.sbUrl) localStorage.setItem('watchlist_local', JSON.stringify(watchList));
+  renderWatchList();
+}
+
+async function resolveTickerName(code) {
+  // For Japanese stocks (4-digit code), auto-append .T
+  const sym = /^\d{4}$/.test(code) ? code+'.T' : code;
+  try {
+    const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1d&range=1d`)}`;
+    const r = await fetch(proxy,{signal:AbortSignal.timeout(5000)});
+    const d = await r.json();
+    const meta = JSON.parse(d.contents)?.chart?.result?.[0]?.meta;
+    return meta?.longName || meta?.shortName || null;
+  } catch { return null; }
+}
+
+let watchPrices = {};
+
+async function fetchWatchPrices() {
+  if(!watchList.length) return;
+  for(const w of watchList) {
+    const sym = /^\d{4}$/.test(w.ticker) ? w.ticker+'.T' : w.ticker;
+    try {
+      const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1d&range=2d`)}`;
+      const r = await fetch(proxy,{signal:AbortSignal.timeout(5000)});
+      const d = await r.json();
+      const meta = JSON.parse(d.contents)?.chart?.result?.[0]?.meta;
+      if(meta) {
+        const price = meta.regularMarketPrice;
+        const prev = meta.chartPreviousClose||meta.previousClose;
+        const pct = ((price-prev)/prev*100);
+        watchPrices[w.ticker] = { price: price.toLocaleString('ja-JP',{maximumFractionDigits:2}), pct: (pct>=0?'+':'')+pct.toFixed(2)+'%', up: pct>=0 };
+      }
+    } catch {}
+  }
+  renderWatchList();
+}
+
+function renderWatchList() {
+  document.getElementById('watchCount').textContent = watchList.length+'銘柄';
+  const el = document.getElementById('watchListWrap');
+  if(!watchList.length) { el.innerHTML='<div class="loading-box" style="color:var(--text-sub)">銘柄コードを入力して追加してください<br><small style="font-size:.72rem">例: 7203（トヨタ）、AAPL</small></div>'; return; }
+  const snUrl = CFG.snUrl||'';
+  el.innerHTML = `<table class="watch-table">
+    <thead><tr><th>銘柄</th><th>現在値</th><th>騰落率</th><th></th></tr></thead>
+    <tbody>${watchList.map(w=>{
+      const p = watchPrices[w.ticker];
+      const snLink = snUrl ? `<a class="watch-action-btn watch-sn-btn" href="${snUrl}?q=${w.ticker}" target="_blank">SN検索</a>` : '';
+      return `<tr>
+        <td><div class="watch-ticker-name">${w.name||w.ticker}</div><div class="watch-ticker-code">${w.ticker}</div></td>
+        <td class="watch-price">${p?p.price:'--'}</td>
+        <td><span class="watch-change ${p?(p.up?'up':'down'):''}">${p?p.pct:'--'}</span></td>
+        <td><div class="watch-actions">${snLink}<button class="watch-action-btn del" onclick="removeWatch('${w.ticker}')">✕</button></div></td>
+      </tr>`;
+    }).join('')}</tbody></table>`;
+}
+
+// ============================================================
+// MEMO
+// ============================================================
+let memoList = [];
+
+async function loadMemos() {
+  if(!CFG.sbUrl||!CFG.sbKey) {
+    memoList = JSON.parse(localStorage.getItem('memos_local')||'[]');
+    renderMemos(); return;
+  }
+  const data = await sbFetch('memos?select=*&order=created_at.desc&limit=50');
+  if(data) { memoList = data; renderMemos(); }
+}
+
+async function saveMemo() {
+  const ticker = document.getElementById('memoTicker').value.trim().toUpperCase();
+  const body = document.getElementById('memoText').value.trim();
+  if(!body) return;
+  const item = { ticker: ticker||null, body, created_at: new Date().toISOString() };
+
+  if(CFG.sbUrl&&CFG.sbKey) {
+    const res = await sbFetch('memos', { method:'POST', body:JSON.stringify(item) });
+    if(res) memoList.unshift(Array.isArray(res)?res[0]:item);
+  } else {
+    item.id = Date.now();
+    memoList.unshift(item);
+    localStorage.setItem('memos_local', JSON.stringify(memoList));
+  }
+  document.getElementById('memoTicker').value='';
+  document.getElementById('memoText').value='';
+  renderMemos();
+}
+
+async function deleteMemo(id, idx) {
+  if(CFG.sbUrl&&CFG.sbKey) await sbFetch(`memos?id=eq.${id}`,{method:'DELETE'});
+  memoList.splice(idx,1);
+  if(!CFG.sbUrl) localStorage.setItem('memos_local', JSON.stringify(memoList));
+  renderMemos();
+}
+
+function renderMemos() {
+  document.getElementById('memoCount').textContent = memoList.length+'件';
+  const el = document.getElementById('memoList');
+  if(!memoList.length){el.innerHTML='<div class="loading-box" style="color:var(--text-sub)">メモはまだありません</div>';return;}
+  const snUrl = CFG.snUrl||'';
+  el.innerHTML = memoList.map((m,i)=>{
+    const dt = new Date(m.created_at);
+    const dateStr = `${dt.getFullYear()}/${dt.getMonth()+1}/${dt.getDate()} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;
+    const codeTag = m.ticker ? `<span class="memo-code-tag" onclick="if(CFG.snUrl)window.open('${snUrl}?q=${m.ticker}','_blank')" title="StockNoteで検索">${m.ticker}</span>` : '';
+    const snBadge = m.ticker&&snUrl ? `<span class="memo-sn-badge">🗒 SN</span>` : '';
+    return `<div class="memo-item">
+      ${codeTag?codeTag:'<span style="width:8px;flex-shrink:0"></span>'}
+      <div class="memo-body">${m.body}${snBadge}<div class="memo-meta">${dateStr}</div></div>
+      <button class="memo-del" onclick="deleteMemo(${m.id||'null'},${i})">✕</button>
+    </div>`;
+  }).join('');
+}
+
+// ============================================================
+// STOCKNOTE PANEL
+// ============================================================
+async function loadSnMemos(filterTicker='') {
+  const el = document.getElementById('snMemoList');
+  if(!CFG.sbUrl||!CFG.sbKey) {
+    el.innerHTML='<div class="sn-no-config">⚙ 設定からSupabase情報を入力してください</div>'; return;
+  }
+  el.innerHTML='<div class="loading-box"><div class="spinner"></div>読込中...</div>';
+
+  // Try to load from 'posts' table (StockNote's table) or 'memos'
+  let data = null;
+  let query = 'posts?select=*&order=created_at.desc&limit=30';
+  if(filterTicker) query += `&or=(ticker.ilike.*${filterTicker}*,tags.cs.{${filterTicker}})`;
+  data = await sbFetch(query);
+
+  // Fallback to memos table
+  if(!data) {
+    let q2 = 'memos?select=*&order=created_at.desc&limit=30';
+    if(filterTicker) q2+=`&ticker=ilike.*${filterTicker}*`;
+    data = await sbFetch(q2);
+  }
+
+  if(!data||!data.length) { el.innerHTML='<div class="sn-no-config">メモ・投稿が見つかりません</div>'; return; }
+
+  const snUrl = CFG.snUrl||'';
+  el.innerHTML = data.map(p=>{
+    const dt = new Date(p.created_at);
+    const dateStr = `${dt.getMonth()+1}/${dt.getDate()}`;
+    const code = p.ticker||p.code||'';
+    const title = p.title||p.body?.slice(0,40)||'(無題)';
+    const body = p.body||p.content||'';
+    const snLink = snUrl&&code ? `${snUrl}?q=${code}` : (snUrl?snUrl:'#');
+    return `<div class="sn-memo-item" onclick="window.open('${snLink}','_blank')">
+      <div class="sn-memo-top">
+        ${code?`<span class="sn-code">${code}</span>`:''}
+        <span class="sn-title">${title}</span>
+      </div>
+      ${body?`<div class="sn-body">${body}</div>`:''}
+      <div class="sn-date">${dateStr}</div>
+    </div>`;
+  }).join('');
+}
+
+function snSearch() {
+  const q = document.getElementById('snSearchInput').value.trim();
+  loadSnMemos(q);
+}
+
+// ============================================================
+// YOUTUBE
+// ============================================================
+const YT_COLORS = ['#ff6b6b20','#4ecdc420','#45b7d120','#f7dc6f20','#a29bfe20','#fd79a820'];
+let ytLinks = JSON.parse(localStorage.getItem('yt_links')||'null') || [
+  { url:'https://www.youtube.com/', title:'【相場解説】今週の日本株まとめ', channel:'株チャンネル', color:YT_COLORS[0] },
+  { url:'https://www.youtube.com/', title:'米国株投資の基礎と最新動向', channel:'US株解説', color:YT_COLORS[1] },
+];
+function saveYt() { localStorage.setItem('yt_links',JSON.stringify(ytLinks)); }
+function renderYt() {
+  document.getElementById('ytCount').textContent=ytLinks.length+'本';
+  document.getElementById('ytList').innerHTML=ytLinks.map((yt,i)=>`
+    <a class="yt-item" href="${yt.url}" target="_blank" rel="noopener">
+      <div class="yt-thumb" style="background:${yt.color}"><span>▶</span><div class="yt-play-overlay">▶</div></div>
+      <div class="yt-info"><div class="yt-title">${yt.title}</div><div class="yt-channel">📺 ${yt.channel}</div></div>
+    </a>`).join('');
+}
+function openYtModal(){document.getElementById('ytModal').classList.add('open');}
+function closeYtModal(){document.getElementById('ytModal').classList.remove('open');}
+function addYtLink(){
+  const url=document.getElementById('ytUrl').value.trim();
+  const title=document.getElementById('ytTitle').value.trim();
+  const ch=document.getElementById('ytChannel').value.trim();
+  if(!url) return;
+  ytLinks.unshift({url,title:title||'YouTube動画',channel:ch||'チャンネル',color:YT_COLORS[Math.floor(Math.random()*YT_COLORS.length)]});
+  saveYt(); renderYt(); closeYtModal();
+  ['ytUrl','ytTitle','ytChannel'].forEach(id=>document.getElementById(id).value='');
+}
+renderYt();
+
+// ============================================================
+// SITE LINKS
+// ============================================================
+let siteLinks = JSON.parse(localStorage.getItem('site_links')||'null') || [
+  {name:'株探',url:'https://kabutan.jp',icon:'🔍'},{name:'Yahoo!株',url:'https://finance.yahoo.co.jp',icon:'📊'},
+  {name:'日経電子版',url:'https://www.nikkei.com',icon:'📰'},{name:'みんかぶ',url:'https://minkabu.jp',icon:'📈'},
+  {name:'TradingView',url:'https://jp.tradingview.com',icon:'📉'},{name:'IR Bank',url:'https://irbank.net',icon:'🏦'},
+  {name:'バフェット・コード',url:'https://www.buffett-code.com',icon:'💰'},{name:'SBI証券',url:'https://www.sbisec.co.jp',icon:'🏢'},
+];
+function saveLinks(){localStorage.setItem('site_links',JSON.stringify(siteLinks));}
+function renderLinks(){
+  document.getElementById('linksGrid').innerHTML = siteLinks.map(l=>`
+    <a class="link-chip" href="${l.url}" target="_blank" rel="noopener"><span>${l.icon}</span><span>${l.name}</span></a>
+  `).join('') + `<button class="link-chip" style="cursor:pointer;border-style:dashed;background:none;color:var(--text-sub)" onclick="document.getElementById('linkModal').classList.add('open')">＋ 追加</button>`;
+}
+function closeLinkModal(){document.getElementById('linkModal').classList.remove('open');}
+function addLinkItem(){
+  const n=document.getElementById('lkName').value.trim();
+  const u=document.getElementById('lkUrl').value.trim();
+  const ic=document.getElementById('lkIcon').value.trim()||'🌐';
+  if(!n||!u) return;
+  siteLinks.push({name:n,url:u.startsWith('http')?u:'https://'+u,icon:ic});
+  saveLinks(); renderLinks(); closeLinkModal();
+  ['lkName','lkUrl','lkIcon'].forEach(id=>document.getElementById(id).value='');
+}
+renderLinks();
+
+// ============================================================
+// KEYBOARD SHORTCUTS
+// ============================================================
+document.addEventListener('keydown', e=>{
+  if(e.key==='Escape') {
+    ['settingsModal','ytModal','linkModal'].forEach(id=>document.getElementById(id).classList.remove('open'));
+  }
+});
+
+// ============================================================
+// INIT
+// ============================================================
+async function initSupabase() {
+  await loadWatchList();
+  await loadMemos();
+  await loadSnMemos();
+  if(watchList.length) fetchWatchPrices();
+}
+
+loadCfg();
+initSupabase();
+</script>
+</body>
+</html>
