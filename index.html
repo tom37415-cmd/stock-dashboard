@@ -500,6 +500,14 @@ if (sessionStorage.getItem('unlocked') === '1') {
     <hr class="modal-divider">
 
     <div class="modal-section">
+      <div class="modal-label">🤖 CLAUDE API KEY（YouTube要約機能）</div>
+      <div class="modal-hint">YouTube動画の要約に使います。Anthropicコンソールから取得してください。<br>キーはこのブラウザにのみ保存されます。</div>
+      <input class="modal-input" id="cfgClaudeKey" type="password" placeholder="sk-ant-...">
+    </div>
+
+    <hr class="modal-divider">
+
+    <div class="modal-section">
       <div class="modal-label">🔐 パスワード変更</div>
       <div class="modal-hint">ダッシュボードのロック画面で使うパスワードを変更できます。<br>空欄のままにするとデフォルト（stock2024）になります。</div>
       <input class="modal-input" id="cfgPassword" type="password" placeholder="新しいパスワード（空欄 = stock2024）">
@@ -517,11 +525,18 @@ if (sessionStorage.getItem('unlocked') === '1') {
   <div class="modal">
     <div class="modal-title">▶ YouTube動画を追加</div>
     <div class="modal-label">YouTube URL</div>
-    <input class="modal-input" id="ytUrl" placeholder="https://www.youtube.com/watch?v=...">
-    <div class="modal-label">タイトル</div>
-    <input class="modal-input" id="ytTitle" placeholder="動画タイトル">
+    <div style="display:flex;gap:8px;">
+      <input class="modal-input" id="ytUrl" placeholder="https://www.youtube.com/watch?v=..." style="margin-bottom:0;flex:1;">
+      <button onclick="summarizeYt()" id="ytSumBtn"
+        style="padding:9px 14px;border-radius:8px;border:none;background:#6366f1;color:white;font-size:.8rem;font-weight:600;cursor:pointer;white-space:nowrap;font-family:inherit;flex-shrink:0;">
+        🤖 AI要約
+      </button>
+    </div>
+    <div id="ytSumResult" style="display:none;margin-top:10px;padding:10px 12px;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;font-size:.8rem;line-height:1.6;color:#4c1d95;max-height:160px;overflow-y:auto;"></div>
+    <div class="modal-label" style="margin-top:10px;">タイトル</div>
+    <input class="modal-input" id="ytTitle" placeholder="動画タイトル（空欄でも可）">
     <div class="modal-label">チャンネル名</div>
-    <input class="modal-input" id="ytChannel" placeholder="チャンネル名">
+    <input class="modal-input" id="ytChannel" placeholder="チャンネル名（空欄でも可）">
     <div class="modal-btns">
       <button class="btn-cancel" onclick="closeYtModal()">キャンセル</button>
       <button class="btn-primary" onclick="addYtLink()">追加</button>
@@ -556,18 +571,23 @@ function loadCfg() {
   if (CFG.snUrl) document.getElementById('snOpenBtn').href = CFG.snUrl;
 }
 function saveSettings() {
-  CFG.snUrl = document.getElementById('cfgSnUrl').value.trim().replace(/\/$/, '');
-  CFG.sbUrl = document.getElementById('cfgSbUrl').value.trim().replace(/\/$/, '');
-  CFG.sbKey = document.getElementById('cfgSbKey').value.trim();
+  CFG.snUrl      = document.getElementById('cfgSnUrl').value.trim().replace(/\/$/, '');
+  CFG.sbUrl      = document.getElementById('cfgSbUrl').value.trim().replace(/\/$/, '');
+  CFG.sbKey      = document.getElementById('cfgSbKey').value.trim();
+  CFG.claudeKey  = document.getElementById('cfgClaudeKey').value.trim();
+  if(document.getElementById('cfgPassword').value.trim())
+    CFG.password = document.getElementById('cfgPassword').value.trim();
   localStorage.setItem('dash_cfg', JSON.stringify(CFG));
   if (CFG.snUrl) document.getElementById('snOpenBtn').href = CFG.snUrl;
   closeSettings();
   initSupabase();
 }
 function openSettings() {
-  document.getElementById('cfgSnUrl').value = CFG.snUrl || '';
-  document.getElementById('cfgSbUrl').value = CFG.sbUrl || '';
-  document.getElementById('cfgSbKey').value = CFG.sbKey || '';
+  document.getElementById('cfgSnUrl').value     = CFG.snUrl     || '';
+  document.getElementById('cfgSbUrl').value     = CFG.sbUrl     || '';
+  document.getElementById('cfgSbKey').value     = CFG.sbKey     || '';
+  document.getElementById('cfgClaudeKey').value = CFG.claudeKey || '';
+  document.getElementById('cfgPassword').value  = '';
   document.getElementById('settingsModal').classList.add('open');
 }
 function closeSettings() { document.getElementById('settingsModal').classList.remove('open'); }
@@ -1290,22 +1310,95 @@ let ytLinks = JSON.parse(localStorage.getItem('yt_links')||'null') || [
   { url:'https://www.youtube.com/', title:'米国株投資の基礎と最新動向', channel:'US株解説', color:YT_COLORS[1] },
 ];
 function saveYt() { localStorage.setItem('yt_links',JSON.stringify(ytLinks)); }
+
 function renderYt() {
-  document.getElementById('ytCount').textContent=ytLinks.length+'本';
-  document.getElementById('ytList').innerHTML=ytLinks.map((yt,i)=>`
-    <a class="yt-item" href="${yt.url}" target="_blank" rel="noopener">
-      <div class="yt-thumb" style="background:${yt.color}"><span>▶</span><div class="yt-play-overlay">▶</div></div>
-      <div class="yt-info"><div class="yt-title">${yt.title}</div><div class="yt-channel">📺 ${yt.channel}</div></div>
-    </a>`).join('');
+  document.getElementById('ytCount').textContent = ytLinks.length + '本';
+  document.getElementById('ytList').innerHTML = ytLinks.map((yt, i) => `
+    <div class="yt-item-wrap">
+      <a class="yt-item" href="${yt.url}" target="_blank" rel="noopener">
+        <div class="yt-thumb" style="background:${yt.color}"><span>▶</span><div class="yt-play-overlay">▶</div></div>
+        <div class="yt-info">
+          <div class="yt-title">${yt.title}</div>
+          <div class="yt-channel">📺 ${yt.channel}</div>
+        </div>
+      </a>
+      <div style="display:flex;gap:6px;padding:0 18px 8px;justify-content:flex-end;">
+        <button onclick="summarizeYtItem(${i})" style="padding:3px 10px;border-radius:6px;border:1px solid #ddd6fe;background:#f5f3ff;color:#6d28d9;font-size:.72rem;cursor:pointer;font-family:inherit;">🤖 要約</button>
+        <button onclick="deleteYt(${i})" style="padding:3px 10px;border-radius:6px;border:1px solid var(--border);background:none;color:var(--text-sub);font-size:.72rem;cursor:pointer;font-family:inherit;">✕ 削除</button>
+      </div>
+      ${yt.summary ? `<div style="margin:0 18px 10px;padding:8px 10px;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;font-size:.76rem;line-height:1.6;color:#4c1d95;">${yt.summary}</div>` : ''}
+    </div>`).join('');
 }
-function openYtModal(){document.getElementById('ytModal').classList.add('open');}
+
+function deleteYt(i) {
+  if(!confirm(`「${ytLinks[i].title}」を削除しますか？`)) return;
+  ytLinks.splice(i, 1); saveYt(); renderYt();
+}
+
+// YouTube要約（モーダルのAI要約ボタン）
+async function summarizeYt() {
+  const url = document.getElementById('ytUrl').value.trim();
+  if (!url) { alert('URLを入力してください'); return; }
+  if (!CFG.claudeKey) { alert('設定からClaude APIキーを入力してください'); return; }
+  const btn = document.getElementById('ytSumBtn');
+  const resultEl = document.getElementById('ytSumResult');
+  btn.textContent = '取得中...'; btn.disabled = true;
+  resultEl.style.display = 'block';
+  resultEl.textContent = '要約を生成中...';
+  const summary = await fetchYtSummary(url);
+  btn.textContent = '🤖 AI要約'; btn.disabled = false;
+  resultEl.textContent = summary;
+}
+
+// 登録済み動画の要約ボタン
+async function summarizeYtItem(i) {
+  if (!CFG.claudeKey) { alert('設定からClaude APIキーを入力してください'); return; }
+  const yt = ytLinks[i];
+  const allBtns = document.querySelectorAll('.yt-item-wrap button');
+  allBtns.forEach(b => { if(b.textContent.includes('要約')) b.textContent = '取得中...'; });
+  const summary = await fetchYtSummary(yt.url);
+  ytLinks[i].summary = summary;
+  saveYt(); renderYt();
+}
+
+// Claude APIで要約生成
+async function fetchYtSummary(url) {
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': CFG.claudeKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 400,
+        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+        messages: [{ role: 'user', content: `以下のYouTube動画について、投資家向けに内容を3〜5行で日本語で要約してください。動画タイトル・主なトピック・結論を含めてください。\nURL: ${url}` }]
+      })
+    });
+    const data = await res.json();
+    const text = data.content?.filter(c => c.type === 'text').map(c => c.text).join('') || '';
+    return text || '要約を取得できませんでした。';
+  } catch(e) {
+    return '要約の取得に失敗しました: ' + e.message;
+  }
+}
+
+function openYtModal(){
+  document.getElementById('ytSumResult').style.display='none';
+  document.getElementById('ytSumResult').textContent='';
+  document.getElementById('ytModal').classList.add('open');
+}
 function closeYtModal(){document.getElementById('ytModal').classList.remove('open');}
 function addYtLink(){
-  const url=document.getElementById('ytUrl').value.trim();
-  const title=document.getElementById('ytTitle').value.trim();
-  const ch=document.getElementById('ytChannel').value.trim();
+  const url   = document.getElementById('ytUrl').value.trim();
+  const title = document.getElementById('ytTitle').value.trim();
+  const ch    = document.getElementById('ytChannel').value.trim();
+  const sum   = document.getElementById('ytSumResult').textContent.trim();
   if(!url) return;
-  ytLinks.unshift({url,title:title||'YouTube動画',channel:ch||'チャンネル',color:YT_COLORS[Math.floor(Math.random()*YT_COLORS.length)]});
+  ytLinks.unshift({
+    url, title: title||'YouTube動画', channel: ch||'チャンネル',
+    color: YT_COLORS[Math.floor(Math.random()*YT_COLORS.length)],
+    summary: sum && sum !== '要約を生成中...' ? sum : ''
+  });
   saveYt(); renderYt(); closeYtModal();
   ['ytUrl','ytTitle','ytChannel'].forEach(id=>document.getElementById(id).value='');
 }
