@@ -171,8 +171,13 @@
 
   /* ===== LINKS ===== */
   .links-grid { padding: 14px 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
-  .link-chip { display: flex; align-items: center; gap: 7px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface2); text-decoration: none; color: var(--text); font-size: 0.78rem; font-weight: 500; transition: all .15s; }
+  .link-chip { display: flex; align-items: center; gap: 7px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface2); text-decoration: none; color: var(--text); font-size: 0.78rem; font-weight: 500; transition: all .15s; position: relative; }
   .link-chip:hover { border-color: var(--accent); background: #eff6ff; color: var(--accent); transform: translateY(-1px); box-shadow: var(--shadow); }
+  .link-chip-actions { position: absolute; top: -8px; right: -6px; display: none; gap: 3px; }
+  .link-chip:hover .link-chip-actions { display: flex; }
+  .link-chip-btn { width: 20px; height: 20px; border-radius: 50%; border: none; font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1; }
+  .link-chip-edit { background: var(--accent); color: white; }
+  .link-chip-del  { background: var(--red);    color: white; }
 
   /* ===== STOCKNOTE PANEL ===== */
   .sn-panel { }
@@ -218,8 +223,98 @@
     .ticker-strip { grid-column: 1; }
   }
 </style>
+
+<style>
+  /* ===== PASSWORD LOCK ===== */
+  #lockScreen {
+    position: fixed; inset: 0; z-index: 9999;
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .lock-box {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 20px;
+    padding: 44px 40px;
+    width: 360px;
+    text-align: center;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 24px 64px rgba(0,0,0,0.4);
+  }
+  .lock-icon { font-size: 2.4rem; margin-bottom: 16px; }
+  .lock-title { font-size: 1.2rem; font-weight: 700; color: #f1f5f9; margin-bottom: 6px; font-family: 'Noto Sans JP', sans-serif; }
+  .lock-sub { font-size: 0.82rem; color: #94a3b8; margin-bottom: 28px; font-family: 'Noto Sans JP', sans-serif; }
+  .lock-input {
+    width: 100%; padding: 12px 16px;
+    border-radius: 10px; border: 1.5px solid rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.08); color: #f1f5f9;
+    font-size: 1rem; text-align: center; letter-spacing: 0.15em;
+    outline: none; margin-bottom: 14px;
+    font-family: 'DM Mono', monospace;
+    transition: border-color .2s;
+  }
+  .lock-input:focus { border-color: #0ea5e9; }
+  .lock-btn {
+    width: 100%; padding: 12px;
+    border-radius: 10px; border: none;
+    background: linear-gradient(135deg, #0ea5e9, #6366f1);
+    color: white; font-size: 0.95rem; font-weight: 700;
+    cursor: pointer; font-family: 'Noto Sans JP', sans-serif;
+    transition: opacity .15s;
+  }
+  .lock-btn:hover { opacity: 0.88; }
+  .lock-error {
+    font-size: 0.8rem; color: #f87171;
+    margin-top: 10px; min-height: 20px;
+    font-family: 'Noto Sans JP', sans-serif;
+  }
+  .lock-hint { font-size: 0.72rem; color: #475569; margin-top: 20px; font-family: 'Noto Sans JP', sans-serif; }
+</style>
 </head>
 <body>
+
+<!-- LOCK SCREEN -->
+<div id="lockScreen">
+  <div class="lock-box">
+    <div class="lock-icon">🔐</div>
+    <div class="lock-title">株式ダッシュボード</div>
+    <div class="lock-sub">パスワードを入力してください</div>
+    <input class="lock-input" id="lockInput" type="password" placeholder="••••••••"
+      onkeydown="if(event.key==='Enter')checkPassword()">
+    <button class="lock-btn" onclick="checkPassword()">ログイン</button>
+    <div class="lock-error" id="lockError"></div>
+    <div class="lock-hint">※ パスワードは設定画面から変更できます</div>
+  </div>
+</div>
+
+<script>
+// ===== PASSWORD LOCK =====
+// デフォルトパスワード（設定画面から変更可能）
+const DEFAULT_PASSWORD = 'stock2024';
+
+function checkPassword() {
+  const cfg = JSON.parse(localStorage.getItem('dash_cfg') || '{}');
+  const correctPw = cfg.password || DEFAULT_PASSWORD;
+  const input = document.getElementById('lockInput').value;
+  if (input === correctPw) {
+    document.getElementById('lockScreen').style.display = 'none';
+    sessionStorage.setItem('unlocked', '1');
+  } else {
+    const err = document.getElementById('lockError');
+    err.textContent = 'パスワードが違います';
+    document.getElementById('lockInput').value = '';
+    document.getElementById('lockInput').focus();
+    setTimeout(() => { err.textContent = ''; }, 2000);
+  }
+}
+
+// セッション中はロック画面をスキップ
+if (sessionStorage.getItem('unlocked') === '1') {
+  document.getElementById('lockScreen').style.display = 'none';
+} else {
+  setTimeout(() => document.getElementById('lockInput').focus(), 100);
+}
+</script>
 
 <header>
   <a class="logo" href="#">
@@ -402,6 +497,14 @@
       <input class="modal-input purple" id="cfgSbKey" placeholder="eyJhbGci... (anon key)">
     </div>
 
+    <hr class="modal-divider">
+
+    <div class="modal-section">
+      <div class="modal-label">🔐 パスワード変更</div>
+      <div class="modal-hint">ダッシュボードのロック画面で使うパスワードを変更できます。<br>空欄のままにするとデフォルト（stock2024）になります。</div>
+      <input class="modal-input" id="cfgPassword" type="password" placeholder="新しいパスワード（空欄 = stock2024）">
+    </div>
+
     <div class="modal-btns">
       <button class="btn-cancel" onclick="closeSettings()">キャンセル</button>
       <button class="btn-primary btn-purple" onclick="saveSettings()">保存して反映</button>
@@ -429,7 +532,7 @@
 <!-- LINK MODAL -->
 <div class="modal-overlay" id="linkModal" onclick="if(event.target===this)closeLinkModal()">
   <div class="modal">
-    <div class="modal-title">🔗 サイトを追加</div>
+    <div class="modal-title" id="linkModalTitle">🔗 サイトを追加</div>
     <div class="modal-label">サイト名</div>
     <input class="modal-input" id="lkName" placeholder="例: 東洋経済オンライン">
     <div class="modal-label">URL</div>
@@ -438,7 +541,7 @@
     <input class="modal-input" id="lkIcon" placeholder="🌐" maxlength="2">
     <div class="modal-btns">
       <button class="btn-cancel" onclick="closeLinkModal()">キャンセル</button>
-      <button class="btn-primary" onclick="addLinkItem()">追加</button>
+      <button class="btn-primary" onclick="addLinkItem()">保存</button>
     </div>
   </div>
 </div>
@@ -1218,18 +1321,54 @@ let siteLinks = JSON.parse(localStorage.getItem('site_links')||'null') || [
   {name:'バフェット・コード',url:'https://www.buffett-code.com',icon:'💰'},{name:'SBI証券',url:'https://www.sbisec.co.jp',icon:'🏢'},
 ];
 function saveLinks(){localStorage.setItem('site_links',JSON.stringify(siteLinks));}
+
 function renderLinks(){
-  document.getElementById('linksGrid').innerHTML = siteLinks.map(l=>`
-    <a class="link-chip" href="${l.url}" target="_blank" rel="noopener"><span>${l.icon}</span><span>${l.name}</span></a>
+  document.getElementById('linksGrid').innerHTML = siteLinks.map((l,i)=>`
+    <div style="position:relative;">
+      <a class="link-chip" href="${l.url}" target="_blank" rel="noopener">
+        <span>${l.icon}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${l.name}</span>
+        <div class="link-chip-actions" onclick="event.preventDefault()">
+          <button class="link-chip-btn link-chip-edit" onclick="editLink(${i})" title="編集">✎</button>
+          <button class="link-chip-btn link-chip-del"  onclick="deleteLink(${i})" title="削除">✕</button>
+        </div>
+      </a>
+    </div>
   `).join('') + `<button class="link-chip" style="cursor:pointer;border-style:dashed;background:none;color:var(--text-sub)" onclick="document.getElementById('linkModal').classList.add('open')">＋ 追加</button>`;
 }
-function closeLinkModal(){document.getElementById('linkModal').classList.remove('open');}
+
+let editLinkIndex = -1;
+
+function editLink(i) {
+  editLinkIndex = i;
+  const l = siteLinks[i];
+  document.getElementById('lkName').value = l.name;
+  document.getElementById('lkUrl').value  = l.url;
+  document.getElementById('lkIcon').value = l.icon;
+  document.getElementById('linkModalTitle').textContent = 'サイトを編集';
+  document.getElementById('linkModal').classList.add('open');
+}
+
+function deleteLink(i) {
+  if(!confirm(`「${siteLinks[i].name}」を削除しますか？`)) return;
+  siteLinks.splice(i, 1);
+  saveLinks(); renderLinks();
+}
+function closeLinkModal(){
+  document.getElementById('linkModal').classList.remove('open');
+  document.getElementById('linkModalTitle').textContent = 'サイトを追加';
+  editLinkIndex = -1;
+}
 function addLinkItem(){
-  const n=document.getElementById('lkName').value.trim();
-  const u=document.getElementById('lkUrl').value.trim();
-  const ic=document.getElementById('lkIcon').value.trim()||'🌐';
-  if(!n||!u) return;
-  siteLinks.push({name:n,url:u.startsWith('http')?u:'https://'+u,icon:ic});
+  const n  = document.getElementById('lkName').value.trim();
+  const u  = document.getElementById('lkUrl').value.trim();
+  const ic = document.getElementById('lkIcon').value.trim() || '🌐';
+  if(!n || !u) return;
+  const entry = { name:n, url:u.startsWith('http')?u:'https://'+u, icon:ic };
+  if(editLinkIndex >= 0) {
+    siteLinks[editLinkIndex] = entry; // 編集
+  } else {
+    siteLinks.push(entry); // 新規追加
+  }
   saveLinks(); renderLinks(); closeLinkModal();
   ['lkName','lkUrl','lkIcon'].forEach(id=>document.getElementById(id).value='');
 }
