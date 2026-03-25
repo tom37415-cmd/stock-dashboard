@@ -393,12 +393,17 @@ if (sessionStorage.getItem('unlocked') === '1') {
       <div class="card-title"><div class="card-title-icon icon-teal">👁</div>ウォッチリスト</div>
       <span class="card-badge badge-green" id="watchCount">0銘柄</span>
     </div>
+    <!-- グループタブ -->
+    <div id="watchGroupTabs" style="display:flex;align-items:center;gap:0;padding:10px 20px 0;border-bottom:1px solid var(--border);background:var(--surface2);overflow-x:auto;scrollbar-width:none;flex-wrap:nowrap;">
+    </div>
+    <!-- 銘柄追加バー -->
     <div class="watch-search-bar">
-      <input class="watch-input" id="watchTickerInput" placeholder="コード or 銘柄名（例: 7203, トヨタ）" onkeydown="if(event.key==='Enter')addWatch()">
+      <input class="watch-input" id="watchTickerInput" placeholder="コード（例: 7203, AAPL）" onkeydown="if(event.key==='Enter')addWatch()">
+      <select id="watchGroupSelect" style="padding:7px 10px;border-radius:8px;border:1.5px solid var(--border);font-size:0.83rem;font-family:inherit;background:var(--surface);color:var(--text);outline:none;"></select>
       <button class="watch-add-btn" onclick="addWatch()">＋ 追加</button>
     </div>
     <div id="watchListWrap">
-      <div class="loading-box">ウォッチリストを読込中...</div>
+      <div class="loading-box">読込中...</div>
     </div>
   </div>
 
@@ -525,6 +530,22 @@ if (sessionStorage.getItem('unlocked') === '1') {
     <div class="modal-btns">
       <button class="btn-cancel" onclick="closeYtModal()">キャンセル</button>
       <button class="btn-primary" onclick="addYtLink()">追加</button>
+    </div>
+  </div>
+</div>
+
+<!-- WATCH GROUP MODAL -->
+<div class="modal-overlay" id="watchGroupModal" onclick="if(event.target===this)closeWatchGroupModal()">
+  <div class="modal">
+    <div class="modal-title">👁 グループ管理</div>
+    <div class="modal-label">新しいグループ名</div>
+    <div style="display:flex;gap:8px;">
+      <input class="modal-input" id="watchGroupNameInput" placeholder="例: 主力株、監視中、米国株" style="margin-bottom:0;flex:1;" onkeydown="if(event.key==='Enter')addWatchGroup()">
+      <button class="btn-primary" onclick="addWatchGroup()" style="white-space:nowrap;">追加</button>
+    </div>
+    <div style="margin-top:16px;" id="watchGroupList"></div>
+    <div class="modal-btns" style="margin-top:16px;">
+      <button class="btn-cancel" onclick="closeWatchGroupModal()">閉じる</button>
     </div>
   </div>
 </div>
@@ -1086,20 +1107,33 @@ async function sbFetch(path, opts={}) {
 }
 
 // ============================================================
-// WATCHLIST
+// WATCHLIST（グループ対応）
 // ============================================================
-let watchList  = [];
+let watchList   = [];
 let watchPrices = {};
+let watchGroups = [];
+let currentWatchGroup = 'all';
+
+function loadWatchData() {
+  watchList   = JSON.parse(localStorage.getItem('watchlist_local') || '[]');
+  const saved = JSON.parse(localStorage.getItem('watch_groups')    || '[]');
+  watchGroups = [{ id:'all', name:'すべて' }, ...saved];
+}
+
+function saveWatchData() {
+  localStorage.setItem('watchlist_local', JSON.stringify(watchList));
+  localStorage.setItem('watch_groups',    JSON.stringify(watchGroups.filter(g => g.id !== 'all')));
+}
 
 async function loadWatchList() {
-  if(!CFG.sbUrl||!CFG.sbKey) {
-    watchList = JSON.parse(localStorage.getItem('watchlist_local')||'[]');
-  } else {
+  if (CFG.sbUrl && CFG.sbKey) {
     const data = await sbFetch('watchlist?select=*&order=added_at.desc');
-    watchList = data || [];
+    if (data) watchList = data;
   }
+  loadWatchData();
+  renderWatchGroups();
   renderWatchList();
-  if(watchList.length) fetchAllWatchPrices();
+  if (watchList.length) fetchAllWatchPrices();
 }
 
 // Yahoo Finance APIをWorkerプロキシ経由で取得
@@ -1111,107 +1145,214 @@ async function fetchYahooChart(sym, range='5d') {
   return JSON.parse(text);
 }
 
+// 日本株の日本語銘柄名を株探から取得
+async function resolveJapaneseName(code) {
+  try {
+    const url = `https://kabutan.jp/stock/?code=${code}`;
+    const proxyUrl = PROXY + encodeURIComponent(url);
+    const res  = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
+    const html = await res.text();
+    const m = html.match(/<title>([^【]+)【/);
+    if (m && m[1]) return m[1].trim();
+    const m2 = html.match(/<h1[^>]*>([^<]{2,30})<\/h1>/);
+    if (m2 && m2[1]) return m2[1].trim();
+  } catch {}
+  return null;
+}
+
+// ===== グループ管理 =====
+function renderWatchGroups() {
+  const tabs = document.getElementById('watchGroupTabs');
+  tabs.innerHTML = watchGroups.map(g => {
+    const count = g.id === 'all' ? watchList.length : watchList.filter(w => w.groupId === g.id).length;
+    const active = currentWatchGroup === g.id;
+    return `<button onclick="switchWatchGroup('${g.id}')"
+      style="padding:6px 14px;font-size:.8rem;font-weight:500;white-space:nowrap;border:none;background:none;
+      border-bottom:2px solid ${active?'var(--accent)':'transparent'};
+      color:${active?'var(--accent)':'var(--text-sub)'};cursor:pointer;font-family:inherit;flex-shrink:0;transition:all .15s;">
+      ${g.name} <span style="font-size:.65rem;opacity:.7;">(${count})</span>
+    </button>`;
+  }).join('') + `<button onclick="openWatchGroupModal()"
+    style="padding:6px 12px;font-size:.78rem;border:none;background:none;color:var(--text-sub);cursor:pointer;font-family:inherit;flex-shrink:0;">
+    ＋ グループ
+  </button>`;
+
+  // グループ選択セレクト更新
+  const sel = document.getElementById('watchGroupSelect');
+  const userGroups = watchGroups.filter(g => g.id !== 'all');
+  sel.innerHTML = userGroups.length
+    ? userGroups.map(g => `<option value="${g.id}">${g.name}</option>`).join('')
+    : `<option value="">グループなし</option>`;
+  sel.style.display = userGroups.length ? '' : 'none';
+}
+
+function switchWatchGroup(groupId) {
+  currentWatchGroup = groupId;
+  renderWatchGroups();
+  renderWatchList();
+}
+
+function openWatchGroupModal() {
+  renderWatchGroupList();
+  document.getElementById('watchGroupModal').classList.add('open');
+}
+function closeWatchGroupModal() {
+  document.getElementById('watchGroupModal').classList.remove('open');
+}
+function renderWatchGroupList() {
+  const el = document.getElementById('watchGroupList');
+  const userGroups = watchGroups.filter(g => g.id !== 'all');
+  if (!userGroups.length) {
+    el.innerHTML = '<div style="font-size:.82rem;color:var(--text-sub);padding:4px 0;">グループがまだありません</div>';
+    return;
+  }
+  el.innerHTML = '<div style="font-size:.72rem;color:var(--text-sub);margin-bottom:8px;font-weight:600;">現在のグループ</div>' +
+    userGroups.map(g => `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--surface2);border-radius:8px;margin-bottom:6px;">
+        <span style="font-size:.85rem;font-weight:500;">${g.name}</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:.72rem;color:var(--text-sub);">${watchList.filter(w=>w.groupId===g.id).length}銘柄</span>
+          <button onclick="deleteWatchGroup('${g.id}')" style="padding:2px 8px;border-radius:5px;border:1px solid var(--border);background:none;color:var(--red);font-size:.72rem;cursor:pointer;">削除</button>
+        </div>
+      </div>`).join('');
+}
+function addWatchGroup() {
+  const name = document.getElementById('watchGroupNameInput').value.trim();
+  if (!name) return;
+  watchGroups.push({ id: 'g_' + Date.now(), name });
+  saveWatchData();
+  document.getElementById('watchGroupNameInput').value = '';
+  renderWatchGroups();
+  renderWatchGroupList();
+}
+function deleteWatchGroup(id) {
+  if (!confirm(`グループを削除しますか？\n（銘柄は「すべて」に移動します）`)) return;
+  watchList.forEach(w => { if (w.groupId === id) delete w.groupId; });
+  watchGroups = watchGroups.filter(g => g.id !== id);
+  if (currentWatchGroup === id) currentWatchGroup = 'all';
+  saveWatchData();
+  renderWatchGroups();
+  renderWatchGroupList();
+  renderWatchList();
+}
+
+// ===== 銘柄追加・削除 =====
 async function addWatch() {
   const val = document.getElementById('watchTickerInput').value.trim();
-  if(!val) return;
+  if (!val) return;
   const btn = document.querySelector('.watch-add-btn');
   btn.textContent = '取得中...'; btn.disabled = true;
 
-  // 日本株4桁→.T付与
-  const sym = /^\d{4}$/.test(val) ? val+'.T' : val.toUpperCase();
-  let name = val.toUpperCase();
+  const isJP = /^\d{4}$/.test(val);
+  const sym  = isJP ? val + '.T' : val.toUpperCase();
+  let name   = val.toUpperCase();
   try {
-    const data = await fetchYahooChart(sym, '1d');
-    const meta = data?.chart?.result?.[0]?.meta;
-    if(meta) name = meta.longName || meta.shortName || name;
+    if (isJP) {
+      const jpName = await resolveJapaneseName(val);
+      if (jpName) name = jpName;
+      else {
+        const data = await fetchYahooChart(sym, '1d');
+        const meta = data?.chart?.result?.[0]?.meta;
+        if (meta) name = meta.longName || meta.shortName || name;
+      }
+    } else {
+      const data = await fetchYahooChart(sym, '1d');
+      const meta = data?.chart?.result?.[0]?.meta;
+      if (meta) name = meta.longName || meta.shortName || name;
+    }
   } catch {}
 
-  const item = { ticker: val.toUpperCase(), sym, name, added_at: new Date().toISOString() };
-  if(CFG.sbUrl&&CFG.sbKey) {
+  const sel     = document.getElementById('watchGroupSelect');
+  const groupId = sel.value || undefined;
+  const item    = { ticker: val.toUpperCase(), sym, name, groupId, added_at: new Date().toISOString() };
+
+  if (CFG.sbUrl && CFG.sbKey) {
     const res = await sbFetch('watchlist', { method:'POST', body:JSON.stringify(item) });
-    if(res) watchList.unshift(Array.isArray(res)?res[0]:item);
-    else watchList.unshift(item);
+    watchList.unshift(res && Array.isArray(res) ? res[0] : item);
   } else {
     watchList.unshift(item);
-    localStorage.setItem('watchlist_local', JSON.stringify(watchList));
   }
+  saveWatchData();
   btn.textContent = '＋ 追加'; btn.disabled = false;
   document.getElementById('watchTickerInput').value = '';
+  renderWatchGroups();
   renderWatchList();
   fetchAllWatchPrices();
 }
 
 async function removeWatch(ticker) {
-  if(CFG.sbUrl&&CFG.sbKey) await sbFetch(`watchlist?ticker=eq.${encodeURIComponent(ticker)}`,{method:'DELETE'});
-  watchList = watchList.filter(w=>w.ticker!==ticker);
+  if (CFG.sbUrl && CFG.sbKey) await sbFetch(`watchlist?ticker=eq.${encodeURIComponent(ticker)}`, { method:'DELETE' });
+  watchList = watchList.filter(w => w.ticker !== ticker);
   delete watchPrices[ticker];
-  if(!CFG.sbUrl) localStorage.setItem('watchlist_local', JSON.stringify(watchList));
+  saveWatchData();
+  renderWatchGroups();
   renderWatchList();
 }
 
+// ===== 価格取得 =====
 async function fetchAllWatchPrices() {
-  for(const w of watchList) {
+  for (const w of watchList) {
     const sym = w.sym || (/^\d{4}$/.test(w.ticker) ? w.ticker+'.T' : w.ticker);
     try {
-      const data = await fetchYahooChart(sym, '5d');
+      const data   = await fetchYahooChart(sym, '5d');
       const result = data?.chart?.result?.[0];
-      if(!result) continue;
+      if (!result) continue;
       const meta   = result.meta;
       const closes = result.indicators?.quote?.[0]?.close || [];
       const price  = meta.regularMarketPrice;
       const prev   = meta.chartPreviousClose || meta.previousClose;
-
-      // 前日比
       const dayPct = prev ? ((price - prev) / prev * 100) : null;
-
-      // 1週間騰落率（5営業日前の終値と比較）
       const validCloses = closes.filter(c => c != null);
-      const weekBase = validCloses.length >= 2 ? validCloses[0] : null;
-      const weekPct  = weekBase ? ((price - weekBase) / weekBase * 100) : null;
-
-      // 銘柄名を更新
-      const resolvedName = meta.longName || meta.shortName || null;
-      if(resolvedName) w.name = resolvedName;
-
-      // 通貨判定（日本株は円）
+      const weekBase    = validCloses.length >= 2 ? validCloses[0] : null;
+      const weekPct     = weekBase ? ((price - weekBase) / weekBase * 100) : null;
+      if (!w.name || w.name === w.ticker) {
+        if (sym.endsWith('.T')) { const jpName = await resolveJapaneseName(w.ticker); if (jpName) w.name = jpName; }
+        else { const rn = meta.longName || meta.shortName; if (rn) w.name = rn; }
+      }
       const isJP = sym.endsWith('.T');
       const fmt  = n => isJP
         ? n.toLocaleString('ja-JP', {maximumFractionDigits:0}) + '円'
         : '$' + n.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
-
       watchPrices[w.ticker] = {
         price:   fmt(price),
-        dayPct:  dayPct  != null ? (dayPct>=0?'+':'')+dayPct.toFixed(2)+'%'  : '--',
+        dayPct:  dayPct  != null ? (dayPct>=0?'+':'')+dayPct.toFixed(2)+'%'   : '--',
         weekPct: weekPct != null ? (weekPct>=0?'+':'')+weekPct.toFixed(2)+'%' : '--',
         dayUp:   dayPct  != null ? dayPct  >= 0 : null,
         weekUp:  weekPct != null ? weekPct >= 0 : null,
       };
-    } catch(e) {
-      console.warn('WatchPrice error:', w.ticker, e);
-    }
+    } catch(e) { console.warn('WatchPrice error:', w.ticker, e); }
   }
-  if(!CFG.sbUrl) localStorage.setItem('watchlist_local', JSON.stringify(watchList));
+  saveWatchData();
   renderWatchList();
 }
 
+// ===== 描画 =====
 function renderWatchList() {
   document.getElementById('watchCount').textContent = watchList.length + '銘柄';
-  const el = document.getElementById('watchListWrap');
-  if(!watchList.length) {
-    el.innerHTML = '<div class="loading-box" style="color:var(--text-sub)">銘柄コードを入力して追加<br><small style="font-size:.72rem">例: 7203（トヨタ）、AAPL</small></div>';
+  const el    = document.getElementById('watchListWrap');
+  const snUrl = CFG.snUrl || '';
+  const list  = currentWatchGroup === 'all'
+    ? watchList
+    : watchList.filter(w => w.groupId === currentWatchGroup);
+
+  if (!list.length) {
+    el.innerHTML = `<div class="loading-box" style="color:var(--text-sub);">
+      ${currentWatchGroup==='all'
+        ? '銘柄コードを入力して追加<br><small>例: 7203（トヨタ）、AAPL</small>'
+        : 'このグループに銘柄がありません'}
+    </div>`;
     return;
   }
-  const snUrl = CFG.snUrl || '';
   el.innerHTML = `<table class="watch-table">
     <thead><tr><th>銘柄</th><th>現在値</th><th>前日比</th><th>1週間</th><th></th></tr></thead>
-    <tbody>${watchList.map(w => {
+    <tbody>${list.map(w => {
       const p = watchPrices[w.ticker];
       const snLink = snUrl ? `<a class="watch-action-btn watch-sn-btn" href="${snUrl}?q=${w.ticker}" target="_blank">SN</a>` : '';
       return `<tr>
         <td><div class="watch-ticker-name">${w.name||w.ticker}</div><div class="watch-ticker-code">${w.ticker}</div></td>
-        <td class="watch-price">${p ? p.price : '<span style="color:var(--text-sub)">取得中</span>'}</td>
-        <td><span class="watch-change ${p&&p.dayUp!=null?(p.dayUp?'up':'down'):''}">${p ? p.dayPct : '--'}</span></td>
-        <td><span class="watch-change ${p&&p.weekUp!=null?(p.weekUp?'up':'down'):''}">${p ? p.weekPct : '--'}</span></td>
+        <td class="watch-price">${p ? p.price : '<span style="color:var(--text-sub);font-size:.78rem;">取得中</span>'}</td>
+        <td><span class="watch-change ${p&&p.dayUp!=null?(p.dayUp?'up':'down'):''}">${p?p.dayPct:'--'}</span></td>
+        <td><span class="watch-change ${p&&p.weekUp!=null?(p.weekUp?'up':'down'):''}">${p?p.weekPct:'--'}</span></td>
         <td><div class="watch-actions">${snLink}<button class="watch-action-btn del" onclick="removeWatch('${w.ticker}')">✕</button></div></td>
       </tr>`;
     }).join('')}</tbody></table>`;
