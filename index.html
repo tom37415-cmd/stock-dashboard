@@ -1088,92 +1088,130 @@ async function sbFetch(path, opts={}) {
 // ============================================================
 // WATCHLIST
 // ============================================================
-let watchList = [];
+let watchList  = [];
+let watchPrices = {};
 
 async function loadWatchList() {
   if(!CFG.sbUrl||!CFG.sbKey) {
     watchList = JSON.parse(localStorage.getItem('watchlist_local')||'[]');
-    renderWatchList(); return;
+  } else {
+    const data = await sbFetch('watchlist?select=*&order=added_at.desc');
+    watchList = data || [];
   }
-  const data = await sbFetch('watchlist?select=*&order=added_at.desc');
-  if(data) { watchList = data; renderWatchList(); }
-  else { watchList = []; renderWatchList(); }
+  renderWatchList();
+  if(watchList.length) fetchAllWatchPrices();
+}
+
+// Yahoo Finance APIをWorkerプロキシ経由で取得
+async function fetchYahooChart(sym, range='5d') {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1d&range=${range}`;
+  const proxyUrl = PROXY + encodeURIComponent(url);
+  const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
+  const text = await res.text();
+  return JSON.parse(text);
 }
 
 async function addWatch() {
   const val = document.getElementById('watchTickerInput').value.trim();
   if(!val) return;
-  // Resolve name via Yahoo Finance
-  const name = await resolveTickerName(val);
-  const item = { ticker: val.toUpperCase(), name: name||val, added_at: new Date().toISOString() };
+  const btn = document.querySelector('.watch-add-btn');
+  btn.textContent = '取得中...'; btn.disabled = true;
 
+  // 日本株4桁→.T付与
+  const sym = /^\d{4}$/.test(val) ? val+'.T' : val.toUpperCase();
+  let name = val.toUpperCase();
+  try {
+    const data = await fetchYahooChart(sym, '1d');
+    const meta = data?.chart?.result?.[0]?.meta;
+    if(meta) name = meta.longName || meta.shortName || name;
+  } catch {}
+
+  const item = { ticker: val.toUpperCase(), sym, name, added_at: new Date().toISOString() };
   if(CFG.sbUrl&&CFG.sbKey) {
     const res = await sbFetch('watchlist', { method:'POST', body:JSON.stringify(item) });
-    if(res) { watchList.unshift(Array.isArray(res)?res[0]:item); }
+    if(res) watchList.unshift(Array.isArray(res)?res[0]:item);
+    else watchList.unshift(item);
   } else {
     watchList.unshift(item);
     localStorage.setItem('watchlist_local', JSON.stringify(watchList));
   }
-  document.getElementById('watchTickerInput').value='';
+  btn.textContent = '＋ 追加'; btn.disabled = false;
+  document.getElementById('watchTickerInput').value = '';
   renderWatchList();
-  fetchWatchPrices();
+  fetchAllWatchPrices();
 }
 
 async function removeWatch(ticker) {
-  if(CFG.sbUrl&&CFG.sbKey) await sbFetch(`watchlist?ticker=eq.${encodeURIComponent(ticker)}`, { method:'DELETE' });
+  if(CFG.sbUrl&&CFG.sbKey) await sbFetch(`watchlist?ticker=eq.${encodeURIComponent(ticker)}`,{method:'DELETE'});
   watchList = watchList.filter(w=>w.ticker!==ticker);
+  delete watchPrices[ticker];
   if(!CFG.sbUrl) localStorage.setItem('watchlist_local', JSON.stringify(watchList));
   renderWatchList();
 }
 
-async function resolveTickerName(code) {
-  // For Japanese stocks (4-digit code), auto-append .T
-  const sym = /^\d{4}$/.test(code) ? code+'.T' : code;
-  try {
-    const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1d&range=1d`)}`;
-    const r = await fetch(proxy,{signal:AbortSignal.timeout(5000)});
-    const d = await r.json();
-    const meta = JSON.parse(d.contents)?.chart?.result?.[0]?.meta;
-    return meta?.longName || meta?.shortName || null;
-  } catch { return null; }
-}
-
-let watchPrices = {};
-
-async function fetchWatchPrices() {
-  if(!watchList.length) return;
+async function fetchAllWatchPrices() {
   for(const w of watchList) {
-    const sym = /^\d{4}$/.test(w.ticker) ? w.ticker+'.T' : w.ticker;
+    const sym = w.sym || (/^\d{4}$/.test(w.ticker) ? w.ticker+'.T' : w.ticker);
     try {
-      const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1d&range=2d`)}`;
-      const r = await fetch(proxy,{signal:AbortSignal.timeout(5000)});
-      const d = await r.json();
-      const meta = JSON.parse(d.contents)?.chart?.result?.[0]?.meta;
-      if(meta) {
-        const price = meta.regularMarketPrice;
-        const prev = meta.chartPreviousClose||meta.previousClose;
-        const pct = ((price-prev)/prev*100);
-        watchPrices[w.ticker] = { price: price.toLocaleString('ja-JP',{maximumFractionDigits:2}), pct: (pct>=0?'+':'')+pct.toFixed(2)+'%', up: pct>=0 };
-      }
-    } catch {}
+      const data = await fetchYahooChart(sym, '5d');
+      const result = data?.chart?.result?.[0];
+      if(!result) continue;
+      const meta   = result.meta;
+      const closes = result.indicators?.quote?.[0]?.close || [];
+      const price  = meta.regularMarketPrice;
+      const prev   = meta.chartPreviousClose || meta.previousClose;
+
+      // 前日比
+      const dayPct = prev ? ((price - prev) / prev * 100) : null;
+
+      // 1週間騰落率（5営業日前の終値と比較）
+      const validCloses = closes.filter(c => c != null);
+      const weekBase = validCloses.length >= 2 ? validCloses[0] : null;
+      const weekPct  = weekBase ? ((price - weekBase) / weekBase * 100) : null;
+
+      // 銘柄名を更新
+      const resolvedName = meta.longName || meta.shortName || null;
+      if(resolvedName) w.name = resolvedName;
+
+      // 通貨判定（日本株は円）
+      const isJP = sym.endsWith('.T');
+      const fmt  = n => isJP
+        ? n.toLocaleString('ja-JP', {maximumFractionDigits:0}) + '円'
+        : '$' + n.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+
+      watchPrices[w.ticker] = {
+        price:   fmt(price),
+        dayPct:  dayPct  != null ? (dayPct>=0?'+':'')+dayPct.toFixed(2)+'%'  : '--',
+        weekPct: weekPct != null ? (weekPct>=0?'+':'')+weekPct.toFixed(2)+'%' : '--',
+        dayUp:   dayPct  != null ? dayPct  >= 0 : null,
+        weekUp:  weekPct != null ? weekPct >= 0 : null,
+      };
+    } catch(e) {
+      console.warn('WatchPrice error:', w.ticker, e);
+    }
   }
+  if(!CFG.sbUrl) localStorage.setItem('watchlist_local', JSON.stringify(watchList));
   renderWatchList();
 }
 
 function renderWatchList() {
-  document.getElementById('watchCount').textContent = watchList.length+'銘柄';
+  document.getElementById('watchCount').textContent = watchList.length + '銘柄';
   const el = document.getElementById('watchListWrap');
-  if(!watchList.length) { el.innerHTML='<div class="loading-box" style="color:var(--text-sub)">銘柄コードを入力して追加してください<br><small style="font-size:.72rem">例: 7203（トヨタ）、AAPL</small></div>'; return; }
-  const snUrl = CFG.snUrl||'';
+  if(!watchList.length) {
+    el.innerHTML = '<div class="loading-box" style="color:var(--text-sub)">銘柄コードを入力して追加<br><small style="font-size:.72rem">例: 7203（トヨタ）、AAPL</small></div>';
+    return;
+  }
+  const snUrl = CFG.snUrl || '';
   el.innerHTML = `<table class="watch-table">
-    <thead><tr><th>銘柄</th><th>現在値</th><th>騰落率</th><th></th></tr></thead>
-    <tbody>${watchList.map(w=>{
+    <thead><tr><th>銘柄</th><th>現在値</th><th>前日比</th><th>1週間</th><th></th></tr></thead>
+    <tbody>${watchList.map(w => {
       const p = watchPrices[w.ticker];
-      const snLink = snUrl ? `<a class="watch-action-btn watch-sn-btn" href="${snUrl}?q=${w.ticker}" target="_blank">SN検索</a>` : '';
+      const snLink = snUrl ? `<a class="watch-action-btn watch-sn-btn" href="${snUrl}?q=${w.ticker}" target="_blank">SN</a>` : '';
       return `<tr>
         <td><div class="watch-ticker-name">${w.name||w.ticker}</div><div class="watch-ticker-code">${w.ticker}</div></td>
-        <td class="watch-price">${p?p.price:'--'}</td>
-        <td><span class="watch-change ${p?(p.up?'up':'down'):''}">${p?p.pct:'--'}</span></td>
+        <td class="watch-price">${p ? p.price : '<span style="color:var(--text-sub)">取得中</span>'}</td>
+        <td><span class="watch-change ${p&&p.dayUp!=null?(p.dayUp?'up':'down'):''}">${p ? p.dayPct : '--'}</span></td>
+        <td><span class="watch-change ${p&&p.weekUp!=null?(p.weekUp?'up':'down'):''}">${p ? p.weekPct : '--'}</span></td>
         <td><div class="watch-actions">${snLink}<button class="watch-action-btn del" onclick="removeWatch('${w.ticker}')">✕</button></div></td>
       </tr>`;
     }).join('')}</tbody></table>`;
@@ -1408,7 +1446,6 @@ async function initSupabase() {
   await loadWatchList();
   await loadMemos();
   await loadSnMemos();
-  if(watchList.length) fetchWatchPrices();
 }
 
 loadCfg();
