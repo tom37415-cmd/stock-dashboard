@@ -517,18 +517,11 @@ if (sessionStorage.getItem('unlocked') === '1') {
   <div class="modal">
     <div class="modal-title">▶ YouTube動画を追加</div>
     <div class="modal-label">YouTube URL</div>
-    <div style="display:flex;gap:8px;">
-      <input class="modal-input" id="ytUrl" placeholder="https://www.youtube.com/watch?v=..." style="margin-bottom:0;flex:1;">
-      <button onclick="summarizeYt()" id="ytSumBtn"
-        style="padding:9px 14px;border-radius:8px;border:none;background:#6366f1;color:white;font-size:.8rem;font-weight:600;cursor:pointer;white-space:nowrap;font-family:inherit;flex-shrink:0;">
-        🤖 AI要約
-      </button>
-    </div>
-    <div id="ytSumResult" style="display:none;margin-top:10px;padding:10px 12px;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;font-size:.8rem;line-height:1.6;color:#4c1d95;max-height:160px;overflow-y:auto;"></div>
-    <div class="modal-label" style="margin-top:10px;">タイトル</div>
-    <input class="modal-input" id="ytTitle" placeholder="動画タイトル（空欄でも可）">
+    <input class="modal-input" id="ytUrl" placeholder="https://www.youtube.com/watch?v=...">
+    <div class="modal-label">タイトル</div>
+    <input class="modal-input" id="ytTitle" placeholder="動画タイトル">
     <div class="modal-label">チャンネル名</div>
-    <input class="modal-input" id="ytChannel" placeholder="チャンネル名（空欄でも可）">
+    <input class="modal-input" id="ytChannel" placeholder="チャンネル名">
     <div class="modal-btns">
       <button class="btn-cancel" onclick="closeYtModal()">キャンセル</button>
       <button class="btn-primary" onclick="addYtLink()">追加</button>
@@ -1306,7 +1299,7 @@ function saveYt() { localStorage.setItem('yt_links',JSON.stringify(ytLinks)); }
 function renderYt() {
   document.getElementById('ytCount').textContent = ytLinks.length + '本';
   document.getElementById('ytList').innerHTML = ytLinks.map((yt, i) => `
-    <div class="yt-item-wrap">
+    <div style="position:relative;">
       <a class="yt-item" href="${yt.url}" target="_blank" rel="noopener">
         <div class="yt-thumb" style="background:${yt.color}"><span>▶</span><div class="yt-play-overlay">▶</div></div>
         <div class="yt-info">
@@ -1314,11 +1307,7 @@ function renderYt() {
           <div class="yt-channel">📺 ${yt.channel}</div>
         </div>
       </a>
-      <div style="display:flex;gap:6px;padding:0 18px 8px;justify-content:flex-end;">
-        <button onclick="summarizeYtItem(${i})" style="padding:3px 10px;border-radius:6px;border:1px solid #ddd6fe;background:#f5f3ff;color:#6d28d9;font-size:.72rem;cursor:pointer;font-family:inherit;">🤖 要約</button>
-        <button onclick="deleteYt(${i})" style="padding:3px 10px;border-radius:6px;border:1px solid var(--border);background:none;color:var(--text-sub);font-size:.72rem;cursor:pointer;font-family:inherit;">✕ 削除</button>
-      </div>
-      ${yt.summary ? `<div style="margin:0 18px 10px;padding:8px 10px;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;font-size:.76rem;line-height:1.6;color:#4c1d95;">${yt.summary}</div>` : ''}
+      <button onclick="deleteYt(${i})" style="position:absolute;top:6px;right:10px;padding:2px 7px;border-radius:5px;border:1px solid var(--border);background:white;color:var(--text-sub);font-size:.7rem;cursor:pointer;">✕</button>
     </div>`).join('');
 }
 
@@ -1327,88 +1316,14 @@ function deleteYt(i) {
   ytLinks.splice(i, 1); saveYt(); renderYt();
 }
 
-// YouTube要約（モーダルのAI要約ボタン）
-async function summarizeYt() {
-  const url = document.getElementById('ytUrl').value.trim();
-  if (!url) { alert('URLを入力してください'); return; }
-  const btn = document.getElementById('ytSumBtn');
-  const resultEl = document.getElementById('ytSumResult');
-  btn.textContent = '取得中...'; btn.disabled = true;
-  resultEl.style.display = 'block';
-  resultEl.textContent = '動画情報を取得中...';
-  const summary = await fetchYtSummary(url);
-  btn.textContent = '🤖 情報取得'; btn.disabled = false;
-  resultEl.textContent = summary;
-}
-
-// 登録済み動画の要約ボタン
-async function summarizeYtItem(i) {
-  const yt = ytLinks[i];
-  const allBtns = document.querySelectorAll('.yt-item-wrap button');
-  allBtns.forEach(b => { if(b.textContent.includes('要約')) b.textContent = '取得中...'; });
-  const summary = await fetchYtSummary(yt.url);
-  ytLinks[i].summary = summary;
-  saveYt(); renderYt();
-}
-
-// YouTube Data APIで動画情報取得→要約生成
-const YT_DATA_API_KEY = 'AIzaSyCrEhGRPJiEz2zJ0qK1v5qO1T-o5HjIzlg';
-
-function extractYtVideoId(url) {
-  const m = url.match(/(?:v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/);
-  return m ? m[1] : null;
-}
-
-async function fetchYtSummary(url) {
-  const videoId = extractYtVideoId(url);
-  if (!videoId) return 'URLから動画IDを取得できませんでした。';
-  try {
-    const apiUrl = `https://www.googleapis.com/youtube/v3/videos?id=${videoId}&part=snippet&key=${YT_DATA_API_KEY}`;
-    const res  = await fetch(apiUrl, { signal: AbortSignal.timeout(8000) });
-    const data = await res.json();
-    const item = data.items?.[0]?.snippet;
-    if (!item) return '動画情報を取得できませんでした。';
-
-    const title       = item.title || '';
-    const channel     = item.channelTitle || '';
-    const description = (item.description || '').slice(0, 500);
-
-    // タイトルと概要欄からClaude APIなしで要約テキストを組み立て
-    // タイトルを自動入力欄にも反映
-    if (document.getElementById('ytTitle') && !document.getElementById('ytTitle').value) {
-      document.getElementById('ytTitle').value = title;
-    }
-    if (document.getElementById('ytChannel') && !document.getElementById('ytChannel').value) {
-      document.getElementById('ytChannel').value = channel;
-    }
-
-    const descSummary = description.trim()
-      ? `\n📄 概要: ${description.replace(/\n+/g,' ').slice(0,200)}${description.length>200?'…':''}`
-      : '';
-    return `📺 ${title}\n👤 ${channel}${descSummary}`;
-
-  } catch(e) {
-    return '動画情報の取得に失敗しました: ' + e.message;
-  }
-}
-
-function openYtModal(){
-  document.getElementById('ytSumResult').style.display='none';
-  document.getElementById('ytSumResult').textContent='';
-  document.getElementById('ytModal').classList.add('open');
-}
-function closeYtModal(){document.getElementById('ytModal').classList.remove('open');}
+function openYtModal(){ document.getElementById('ytModal').classList.add('open'); }
+function closeYtModal(){ document.getElementById('ytModal').classList.remove('open'); }
 function addYtLink(){
   const url   = document.getElementById('ytUrl').value.trim();
   const title = document.getElementById('ytTitle').value.trim();
   const ch    = document.getElementById('ytChannel').value.trim();
-  const sum   = document.getElementById('ytSumResult').textContent.trim();
   if(!url) return;
-  ytLinks.unshift({
-    url, title: title||'YouTube動画', channel: ch||'チャンネル',
-    color: YT_COLORS[Math.floor(Math.random()*YT_COLORS.length)],
-    summary: sum && sum !== '要約を生成中...' ? sum : ''
-  });
+  ytLinks.unshift({ url, title: title||'YouTube動画', channel: ch||'チャンネル', color: YT_COLORS[Math.floor(Math.random()*YT_COLORS.length)] });
   saveYt(); renderYt(); closeYtModal();
   ['ytUrl','ytTitle','ytChannel'].forEach(id=>document.getElementById(id).value='');
 }
