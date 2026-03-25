@@ -500,14 +500,6 @@ if (sessionStorage.getItem('unlocked') === '1') {
     <hr class="modal-divider">
 
     <div class="modal-section">
-      <div class="modal-label">🤖 CLAUDE API KEY（YouTube要約機能）</div>
-      <div class="modal-hint">YouTube動画の要約に使います。Anthropicコンソールから取得してください。<br>キーはこのブラウザにのみ保存されます。</div>
-      <input class="modal-input" id="cfgClaudeKey" type="password" placeholder="sk-ant-...">
-    </div>
-
-    <hr class="modal-divider">
-
-    <div class="modal-section">
       <div class="modal-label">🔐 パスワード変更</div>
       <div class="modal-hint">ダッシュボードのロック画面で使うパスワードを変更できます。<br>空欄のままにするとデフォルト（stock2024）になります。</div>
       <input class="modal-input" id="cfgPassword" type="password" placeholder="新しいパスワード（空欄 = stock2024）">
@@ -1339,20 +1331,18 @@ function deleteYt(i) {
 async function summarizeYt() {
   const url = document.getElementById('ytUrl').value.trim();
   if (!url) { alert('URLを入力してください'); return; }
-  if (!CFG.claudeKey) { alert('設定からClaude APIキーを入力してください'); return; }
   const btn = document.getElementById('ytSumBtn');
   const resultEl = document.getElementById('ytSumResult');
   btn.textContent = '取得中...'; btn.disabled = true;
   resultEl.style.display = 'block';
-  resultEl.textContent = '要約を生成中...';
+  resultEl.textContent = '動画情報を取得中...';
   const summary = await fetchYtSummary(url);
-  btn.textContent = '🤖 AI要約'; btn.disabled = false;
+  btn.textContent = '🤖 情報取得'; btn.disabled = false;
   resultEl.textContent = summary;
 }
 
 // 登録済み動画の要約ボタン
 async function summarizeYtItem(i) {
-  if (!CFG.claudeKey) { alert('設定からClaude APIキーを入力してください'); return; }
   const yt = ytLinks[i];
   const allBtns = document.querySelectorAll('.yt-item-wrap button');
   allBtns.forEach(b => { if(b.textContent.includes('要約')) b.textContent = '取得中...'; });
@@ -1361,24 +1351,44 @@ async function summarizeYtItem(i) {
   saveYt(); renderYt();
 }
 
-// Claude APIで要約生成
+// YouTube Data APIで動画情報取得→要約生成
+const YT_DATA_API_KEY = 'AIzaSyCrEhGRPJiEz2zJ0qK1v5qO1T-o5HjIzlg';
+
+function extractYtVideoId(url) {
+  const m = url.match(/(?:v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+
 async function fetchYtSummary(url) {
+  const videoId = extractYtVideoId(url);
+  if (!videoId) return 'URLから動画IDを取得できませんでした。';
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': CFG.claudeKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 400,
-        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-        messages: [{ role: 'user', content: `以下のYouTube動画について、投資家向けに内容を3〜5行で日本語で要約してください。動画タイトル・主なトピック・結論を含めてください。\nURL: ${url}` }]
-      })
-    });
+    const apiUrl = `https://www.googleapis.com/youtube/v3/videos?id=${videoId}&part=snippet&key=${YT_DATA_API_KEY}`;
+    const res  = await fetch(apiUrl, { signal: AbortSignal.timeout(8000) });
     const data = await res.json();
-    const text = data.content?.filter(c => c.type === 'text').map(c => c.text).join('') || '';
-    return text || '要約を取得できませんでした。';
+    const item = data.items?.[0]?.snippet;
+    if (!item) return '動画情報を取得できませんでした。';
+
+    const title       = item.title || '';
+    const channel     = item.channelTitle || '';
+    const description = (item.description || '').slice(0, 500);
+
+    // タイトルと概要欄からClaude APIなしで要約テキストを組み立て
+    // タイトルを自動入力欄にも反映
+    if (document.getElementById('ytTitle') && !document.getElementById('ytTitle').value) {
+      document.getElementById('ytTitle').value = title;
+    }
+    if (document.getElementById('ytChannel') && !document.getElementById('ytChannel').value) {
+      document.getElementById('ytChannel').value = channel;
+    }
+
+    const descSummary = description.trim()
+      ? `\n📄 概要: ${description.replace(/\n+/g,' ').slice(0,200)}${description.length>200?'…':''}`
+      : '';
+    return `📺 ${title}\n👤 ${channel}${descSummary}`;
+
   } catch(e) {
-    return '要約の取得に失敗しました: ' + e.message;
+    return '動画情報の取得に失敗しました: ' + e.message;
   }
 }
 
