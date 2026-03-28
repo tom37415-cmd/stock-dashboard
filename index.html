@@ -1466,21 +1466,34 @@ function snSearch() {
 }
 
 // ============================================================
-// YOUTUBE
+// YOUTUBE（Supabase対応）
 // ============================================================
 const YT_COLORS = ['#ff6b6b20','#4ecdc420','#45b7d120','#f7dc6f20','#a29bfe20','#fd79a820'];
-let ytLinks = JSON.parse(localStorage.getItem('yt_links')||'null') || [
-  { url:'https://www.youtube.com/', title:'【相場解説】今週の日本株まとめ', channel:'株チャンネル', color:YT_COLORS[0] },
-  { url:'https://www.youtube.com/', title:'米国株投資の基礎と最新動向', channel:'US株解説', color:YT_COLORS[1] },
-];
-function saveYt() { localStorage.setItem('yt_links',JSON.stringify(ytLinks)); }
+let ytLinks = [];
+
+async function loadYtLinks() {
+  if (CFG.sbUrl && CFG.sbKey) {
+    const data = await sbFetch('yt_links?select=*&order=sort_order.asc');
+    if (data) { ytLinks = data; renderYt(); return; }
+  }
+  ytLinks = JSON.parse(localStorage.getItem('yt_links') || 'null') || [
+    { url:'https://www.youtube.com/', title:'【相場解説】今週の日本株まとめ', channel:'株チャンネル', color:YT_COLORS[0] },
+    { url:'https://www.youtube.com/', title:'米国株投資の基礎と最新動向', channel:'US株解説', color:YT_COLORS[1] },
+  ];
+  renderYt();
+}
+
+async function saveYt() {
+  if (CFG.sbUrl && CFG.sbKey) return; // Supabase使用時は個別保存
+  localStorage.setItem('yt_links', JSON.stringify(ytLinks));
+}
 
 function renderYt() {
   document.getElementById('ytCount').textContent = ytLinks.length + '本';
   document.getElementById('ytList').innerHTML = ytLinks.map((yt, i) => `
     <div style="position:relative;">
       <a class="yt-item" href="${yt.url}" target="_blank" rel="noopener">
-        <div class="yt-thumb" style="background:${yt.color}"><span>▶</span><div class="yt-play-overlay">▶</div></div>
+        <div class="yt-thumb" style="background:${yt.color||YT_COLORS[i%YT_COLORS.length]}"><span>▶</span><div class="yt-play-overlay">▶</div></div>
         <div class="yt-info">
           <div class="yt-title">${yt.title}</div>
           <div class="yt-channel">📺 ${yt.channel}</div>
@@ -1490,40 +1503,72 @@ function renderYt() {
     </div>`).join('');
 }
 
-function deleteYt(i) {
-  if(!confirm(`「${ytLinks[i].title}」を削除しますか？`)) return;
-  ytLinks.splice(i, 1); saveYt(); renderYt();
+async function deleteYt(i) {
+  if (!confirm(`「${ytLinks[i].title}」を削除しますか？`)) return;
+  if (CFG.sbUrl && CFG.sbKey && ytLinks[i].id) {
+    await sbFetch(`yt_links?id=eq.${ytLinks[i].id}`, { method:'DELETE' });
+  }
+  ytLinks.splice(i, 1);
+  await saveYt();
+  renderYt();
 }
 
 function openYtModal(){ document.getElementById('ytModal').classList.add('open'); }
 function closeYtModal(){ document.getElementById('ytModal').classList.remove('open'); }
-function addYtLink(){
+
+async function addYtLink() {
   const url   = document.getElementById('ytUrl').value.trim();
   const title = document.getElementById('ytTitle').value.trim();
   const ch    = document.getElementById('ytChannel').value.trim();
-  if(!url) return;
-  ytLinks.unshift({ url, title: title||'YouTube動画', channel: ch||'チャンネル', color: YT_COLORS[Math.floor(Math.random()*YT_COLORS.length)] });
-  saveYt(); renderYt(); closeYtModal();
+  if (!url) return;
+  const entry = { url, title: title||'YouTube動画', channel: ch||'チャンネル', color: YT_COLORS[Math.floor(Math.random()*YT_COLORS.length)], sort_order: 0 };
+  if (CFG.sbUrl && CFG.sbKey) {
+    const res = await sbFetch('yt_links', { method:'POST', body:JSON.stringify(entry) });
+    ytLinks.unshift(res && Array.isArray(res) ? res[0] : entry);
+  } else {
+    ytLinks.unshift(entry);
+    await saveYt();
+  }
+  renderYt();
+  closeYtModal();
   ['ytUrl','ytTitle','ytChannel'].forEach(id=>document.getElementById(id).value='');
 }
-renderYt();
 
 // ============================================================
-// SITE LINKS
+// SITE LINKS（Supabase対応）
 // ============================================================
-let siteLinks = JSON.parse(localStorage.getItem('site_links')||'null') || [
-  {name:'株探',url:'https://kabutan.jp',icon:'🔍'},{name:'Yahoo!株',url:'https://finance.yahoo.co.jp',icon:'📊'},
-  {name:'日経電子版',url:'https://www.nikkei.com',icon:'📰'},{name:'みんかぶ',url:'https://minkabu.jp',icon:'📈'},
-  {name:'TradingView',url:'https://jp.tradingview.com',icon:'📉'},{name:'IR Bank',url:'https://irbank.net',icon:'🏦'},
-  {name:'バフェット・コード',url:'https://www.buffett-code.com',icon:'💰'},{name:'SBI証券',url:'https://www.sbisec.co.jp',icon:'🏢'},
+const DEFAULT_SITE_LINKS = [
+  {name:'株探',url:'https://kabutan.jp',icon:'🔍'},
+  {name:'Yahoo!株',url:'https://finance.yahoo.co.jp',icon:'📊'},
+  {name:'日経電子版',url:'https://www.nikkei.com',icon:'📰'},
+  {name:'みんかぶ',url:'https://minkabu.jp',icon:'📈'},
+  {name:'TradingView',url:'https://jp.tradingview.com',icon:'📉'},
+  {name:'IR Bank',url:'https://irbank.net',icon:'🏦'},
+  {name:'バフェット・コード',url:'https://www.buffett-code.com',icon:'💰'},
+  {name:'SBI証券',url:'https://www.sbisec.co.jp',icon:'🏢'},
 ];
-function saveLinks(){localStorage.setItem('site_links',JSON.stringify(siteLinks));}
+let siteLinks = [];
 
-function renderLinks(){
+async function loadSiteLinks() {
+  if (CFG.sbUrl && CFG.sbKey) {
+    const data = await sbFetch('site_links?select=*&order=sort_order.asc');
+    if (data && data.length) { siteLinks = data; renderLinks(); return; }
+  }
+  siteLinks = JSON.parse(localStorage.getItem('site_links') || 'null') || DEFAULT_SITE_LINKS;
+  renderLinks();
+}
+
+async function saveLinks() {
+  if (CFG.sbUrl && CFG.sbKey) return;
+  localStorage.setItem('site_links', JSON.stringify(siteLinks));
+}
+
+function renderLinks() {
   document.getElementById('linksGrid').innerHTML = siteLinks.map((l,i)=>`
     <div style="position:relative;">
       <a class="link-chip" href="${l.url}" target="_blank" rel="noopener">
-        <span>${l.icon}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${l.name}</span>
+        <span>${l.icon}</span>
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${l.name}</span>
         <div class="link-chip-actions" onclick="event.preventDefault()">
           <button class="link-chip-btn link-chip-edit" onclick="editLink(${i})" title="編集">✎</button>
           <button class="link-chip-btn link-chip-del"  onclick="deleteLink(${i})" title="削除">✕</button>
@@ -1545,38 +1590,55 @@ function editLink(i) {
   document.getElementById('linkModal').classList.add('open');
 }
 
-function deleteLink(i) {
-  if(!confirm(`「${siteLinks[i].name}」を削除しますか？`)) return;
+async function deleteLink(i) {
+  if (!confirm(`「${siteLinks[i].name}」を削除しますか？`)) return;
+  if (CFG.sbUrl && CFG.sbKey && siteLinks[i].id) {
+    await sbFetch(`site_links?id=eq.${siteLinks[i].id}`, { method:'DELETE' });
+  }
   siteLinks.splice(i, 1);
-  saveLinks(); renderLinks();
+  await saveLinks();
+  renderLinks();
 }
-function closeLinkModal(){
+
+function closeLinkModal() {
   document.getElementById('linkModal').classList.remove('open');
   document.getElementById('linkModalTitle').textContent = 'サイトを追加';
   editLinkIndex = -1;
 }
-function addLinkItem(){
+
+async function addLinkItem() {
   const n  = document.getElementById('lkName').value.trim();
   const u  = document.getElementById('lkUrl').value.trim();
   const ic = document.getElementById('lkIcon').value.trim() || '🌐';
-  if(!n || !u) return;
-  const entry = { name:n, url:u.startsWith('http')?u:'https://'+u, icon:ic };
-  if(editLinkIndex >= 0) {
-    siteLinks[editLinkIndex] = entry; // 編集
+  if (!n || !u) return;
+  const entry = { name:n, url:u.startsWith('http')?u:'https://'+u, icon:ic, sort_order: siteLinks.length };
+
+  if (CFG.sbUrl && CFG.sbKey) {
+    if (editLinkIndex >= 0 && siteLinks[editLinkIndex].id) {
+      // 編集
+      await sbFetch(`site_links?id=eq.${siteLinks[editLinkIndex].id}`, { method:'PATCH', body:JSON.stringify({name:n, url:entry.url, icon:ic}) });
+      siteLinks[editLinkIndex] = { ...siteLinks[editLinkIndex], ...entry };
+    } else {
+      // 新規
+      const res = await sbFetch('site_links', { method:'POST', body:JSON.stringify(entry) });
+      siteLinks.push(res && Array.isArray(res) ? res[0] : entry);
+    }
   } else {
-    siteLinks.push(entry); // 新規追加
+    if (editLinkIndex >= 0) siteLinks[editLinkIndex] = entry;
+    else siteLinks.push(entry);
+    await saveLinks();
   }
-  saveLinks(); renderLinks(); closeLinkModal();
+  renderLinks();
+  closeLinkModal();
   ['lkName','lkUrl','lkIcon'].forEach(id=>document.getElementById(id).value='');
 }
-renderLinks();
 
 // ============================================================
 // KEYBOARD SHORTCUTS
 // ============================================================
 document.addEventListener('keydown', e=>{
   if(e.key==='Escape') {
-    ['settingsModal','ytModal','linkModal'].forEach(id=>document.getElementById(id).classList.remove('open'));
+    ['settingsModal','ytModal','linkModal','watchGroupModal'].forEach(id=>document.getElementById(id).classList.remove('open'));
   }
 });
 
@@ -1587,6 +1649,8 @@ async function initSupabase() {
   await loadWatchList();
   await loadMemos();
   await loadSnMemos();
+  await loadYtLinks();
+  await loadSiteLinks();
 }
 
 loadCfg();
