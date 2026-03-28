@@ -577,11 +577,10 @@ function loadCfg() {
   if (CFG.snUrl) document.getElementById('snOpenBtn').href = CFG.snUrl;
 }
 function saveSettings() {
-  CFG.snUrl      = document.getElementById('cfgSnUrl').value.trim().replace(/\/$/, '');
-  CFG.sbUrl      = document.getElementById('cfgSbUrl').value.trim().replace(/\/$/, '');
-  CFG.sbKey      = document.getElementById('cfgSbKey').value.trim();
-  CFG.claudeKey  = document.getElementById('cfgClaudeKey').value.trim();
-  if(document.getElementById('cfgPassword').value.trim())
+  CFG.snUrl = document.getElementById('cfgSnUrl').value.trim().replace(/\/$/, '');
+  CFG.sbUrl = document.getElementById('cfgSbUrl').value.trim().replace(/\/$/, '');
+  CFG.sbKey = document.getElementById('cfgSbKey').value.trim();
+  if (document.getElementById('cfgPassword').value.trim())
     CFG.password = document.getElementById('cfgPassword').value.trim();
   localStorage.setItem('dash_cfg', JSON.stringify(CFG));
   if (CFG.snUrl) document.getElementById('snOpenBtn').href = CFG.snUrl;
@@ -589,11 +588,10 @@ function saveSettings() {
   initSupabase();
 }
 function openSettings() {
-  document.getElementById('cfgSnUrl').value     = CFG.snUrl     || '';
-  document.getElementById('cfgSbUrl').value     = CFG.sbUrl     || '';
-  document.getElementById('cfgSbKey').value     = CFG.sbKey     || '';
-  document.getElementById('cfgClaudeKey').value = CFG.claudeKey || '';
-  document.getElementById('cfgPassword').value  = '';
+  document.getElementById('cfgSnUrl').value    = CFG.snUrl    || '';
+  document.getElementById('cfgSbUrl').value    = CFG.sbUrl    || '';
+  document.getElementById('cfgSbKey').value    = CFG.sbKey    || '';
+  document.getElementById('cfgPassword').value = '';
   document.getElementById('settingsModal').classList.add('open');
 }
 function closeSettings() { document.getElementById('settingsModal').classList.remove('open'); }
@@ -1116,7 +1114,12 @@ let currentWatchGroup = 'all';
 
 function loadWatchData() {
   watchList   = JSON.parse(localStorage.getItem('watchlist_local') || '[]');
-  const saved = JSON.parse(localStorage.getItem('watch_groups')    || '[]');
+  // 壊れた銘柄名（HTMLが混入しているもの）をクリーンアップ
+  watchList = watchList.map(w => {
+    if (w.name && w.name.length > 50) w.name = w.ticker;
+    return w;
+  });
+  const saved = JSON.parse(localStorage.getItem('watch_groups') || '[]');
   watchGroups = [{ id:'all', name:'すべて' }, ...saved];
 }
 
@@ -1152,10 +1155,11 @@ async function resolveJapaneseName(code) {
     const proxyUrl = PROXY + encodeURIComponent(url);
     const res  = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
     const html = await res.text();
-    const m = html.match(/<title>([^【]+)【/);
-    if (m && m[1]) return m[1].trim();
-    const m2 = html.match(/<h1[^>]*>([^<]{2,30})<\/h1>/);
-    if (m2 && m2[1]) return m2[1].trim();
+    // 404ページや「見つかりません」は除外
+    if (html.includes('お探しのページが見つかりません') || html.includes('404')) return null;
+    // <title>銘柄名【コード】株価 - 株探</title> の形式から抽出
+    const m = html.match(/<title>\s*([^【\n]+)【/);
+    if (m && m[1] && m[1].trim().length < 30) return m[1].trim();
   } catch {}
   return null;
 }
