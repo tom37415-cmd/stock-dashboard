@@ -1298,25 +1298,58 @@ async function fetchAllWatchPrices() {
   for (const w of watchList) {
     const sym = w.sym || (/^\d{4}$/.test(w.ticker) ? w.ticker+'.T' : w.ticker);
     try {
-      const data   = await fetchYahooChart(sym, '5d');
+      const data   = await fetchYahooChart(sym, '10d');
       const result = data?.chart?.result?.[0];
       if (!result) continue;
-      const meta   = result.meta;
-      const closes = result.indicators?.quote?.[0]?.close || [];
-      const price  = meta.regularMarketPrice;
-      const prev   = meta.chartPreviousClose || meta.previousClose;
-      const dayPct = prev ? ((price - prev) / prev * 100) : null;
-      const validCloses = closes.filter(c => c != null);
-      const weekBase    = validCloses.length >= 2 ? validCloses[0] : null;
-      const weekPct     = weekBase ? ((price - weekBase) / weekBase * 100) : null;
+      const meta      = result.meta;
+      const timestamps= result.timestamp || [];
+      const closes    = result.indicators?.quote?.[0]?.close || [];
+
+      // 有効な（nullでない）終値とタイムスタンプのペアを取得
+      const validBars = timestamps
+        .map((t, i) => ({ t, c: closes[i] }))
+        .filter(b => b.c != null);
+
+      if (validBars.length === 0) continue;
+
+      // 最新確定終値（前営業日）と前々営業日終値を取得
+      const lastBar = validBars[validBars.length - 1];
+      const prevBar = validBars.length >= 2 ? validBars[validBars.length - 2] : null;
+      const weekBar = validBars.length >= 6 ? validBars[validBars.length - 6] : validBars[0];
+
+      // 現在値：取引中なら meta.regularMarketPrice、土日・時間外なら最新確定終値
+      const now = Date.now() / 1000;
+      const jst = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+      const day = jst.getDay();
+      const hour = jst.getHours(), min = jst.getMinutes(), totalMin = hour*60+min;
+      const isWeekday = day >= 1 && day <= 5;
+      const isJPOpen  = sym.endsWith('.T') && isWeekday &&
+        ((totalMin >= 9*60 && totalMin < 11*60+30) || (totalMin >= 12*60+30 && totalMin < 15*60+30));
+      const isUSOpen  = !sym.endsWith('.T') && isWeekday && totalMin >= 23*60+30; // 簡易判定
+
+      let price;
+      if (isJPOpen || isUSOpen) {
+        price = meta.regularMarketPrice; // 取引中はリアルタイム価格
+      } else {
+        price = lastBar.c; // 時間外・土日は最新確定終値
+      }
+
+      // 前営業日比：最新確定終値 vs 前々営業日終値
+      const dayPct  = prevBar ? ((lastBar.c - prevBar.c) / prevBar.c * 100) : null;
+      // 1週間比：最新確定終値 vs 5営業日前終値
+      const weekPct = weekBar ? ((lastBar.c - weekBar.c) / weekBar.c * 100) : null;
+
+      // 銘柄名更新
       if (!w.name || w.name === w.ticker) {
         if (sym.endsWith('.T')) { const jpName = await resolveJapaneseName(w.ticker); if (jpName) w.name = jpName; }
         else { const rn = meta.longName || meta.shortName; if (rn) w.name = rn; }
       }
+
       const isJP = sym.endsWith('.T');
       const fmt  = n => isJP
         ? n.toLocaleString('ja-JP', {maximumFractionDigits:0}) + '円'
         : '$' + n.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+
       watchPrices[w.ticker] = {
         price:   fmt(price),
         dayPct:  dayPct  != null ? (dayPct>=0?'+':'')+dayPct.toFixed(2)+'%'   : '--',
