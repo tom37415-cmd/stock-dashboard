@@ -1740,13 +1740,25 @@ let siteLinks = [];
 async function loadSiteLinks() {
   if (CFG.sbUrl && CFG.sbKey) {
     const data = await sbFetch('site_links?select=*&order=sort_order.asc');
-    if (data && data.length) { siteLinks = data; renderLinks(); return; }
+    if (data && data.length) {
+      siteLinks = data;
+      renderLinks();
+      return;
+    }
+    // Supabaseにデータなし → デフォルトを初期投入
+    const seeds = DEFAULT_SITE_LINKS.map((l, i) => ({ ...l, sort_order: i }));
+    const res = await sbFetch('site_links', { method: 'POST', body: JSON.stringify(seeds) });
+    siteLinks = (res && Array.isArray(res) && res.length) ? res : seeds;
+    renderLinks();
+    return;
   }
+  // Supabase未設定 → localStorage
   siteLinks = JSON.parse(localStorage.getItem('site_links') || 'null') || DEFAULT_SITE_LINKS;
   renderLinks();
 }
 
 async function saveLinks() {
+  // Supabase設定時はSupabase側で直接操作するのでここでは何もしない
   if (CFG.sbUrl && CFG.sbKey) return;
   localStorage.setItem('site_links', JSON.stringify(siteLinks));
 }
