@@ -1745,10 +1745,16 @@ async function loadSiteLinks() {
       renderLinks();
       return;
     }
-    // Supabaseにデータなし → デフォルトを初期投入
-    const seeds = DEFAULT_SITE_LINKS.map((l, i) => ({ ...l, sort_order: i }));
-    const res = await sbFetch('site_links', { method: 'POST', body: JSON.stringify(seeds) });
-    siteLinks = (res && Array.isArray(res) && res.length) ? res : seeds;
+    // Supabaseにデータなし → デフォルトを1件ずつ初期投入
+    for (let i = 0; i < DEFAULT_SITE_LINKS.length; i++) {
+      await sbFetch('site_links', {
+        method: 'POST',
+        body: JSON.stringify({ ...DEFAULT_SITE_LINKS[i], sort_order: i })
+      });
+    }
+    // 投入後に再取得
+    const seeded = await sbFetch('site_links?select=*&order=sort_order.asc');
+    siteLinks = (seeded && seeded.length) ? seeded : DEFAULT_SITE_LINKS;
     renderLinks();
     return;
   }
@@ -1816,12 +1822,19 @@ async function addLinkItem() {
   if (CFG.sbUrl && CFG.sbKey) {
     if (editLinkIndex >= 0 && siteLinks[editLinkIndex].id) {
       // 編集
-      await sbFetch(`site_links?id=eq.${siteLinks[editLinkIndex].id}`, { method:'PATCH', body:JSON.stringify({name:n, url:entry.url, icon:ic}) });
+      await sbFetch(`site_links?id=eq.${siteLinks[editLinkIndex].id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ name:n, url:entry.url, icon:ic })
+      });
       siteLinks[editLinkIndex] = { ...siteLinks[editLinkIndex], ...entry };
     } else {
-      // 新規
-      const res = await sbFetch('site_links', { method:'POST', body:JSON.stringify(entry) });
-      siteLinks.push(res && Array.isArray(res) ? res[0] : entry);
+      // 新規 — 単体オブジェクトで送信、レスポンスは配列の先頭を取る
+      const res = await sbFetch('site_links', {
+        method: 'POST',
+        body: JSON.stringify(entry)
+      });
+      const saved = Array.isArray(res) ? res[0] : (res && res.id ? res : entry);
+      siteLinks.push(saved);
     }
   } else {
     if (editLinkIndex >= 0) siteLinks[editLinkIndex] = entry;
