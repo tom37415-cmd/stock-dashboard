@@ -222,6 +222,89 @@
     .sidebar { grid-column: 1; grid-row: auto; }
     .ticker-strip { grid-column: 1; }
   }
+
+  /* ===== PREDICTION BUTTON ===== */
+  .predict-btn {
+    padding: 6px 14px; border-radius: 8px;
+    border: 1px solid #a78bfa;
+    background: linear-gradient(135deg, #faf5ff, #ede9fe);
+    color: #7c3aed; font-size: 0.8rem; font-weight: 600;
+    cursor: pointer; display: flex; align-items: center; gap: 5px;
+    transition: all .15s; font-family: inherit; white-space: nowrap;
+  }
+  .predict-btn:hover { background: linear-gradient(135deg, #7c3aed, #6366f1); color: white; border-color: #7c3aed; }
+  .predict-btn:disabled { opacity: .6; cursor: not-allowed; }
+  .predict-btn .spin { display: inline-block; animation: spin .7s linear infinite; }
+
+  /* ===== PREDICTION MODAL ===== */
+  #predictModal .modal { width: 680px; max-width: 96vw; }
+  .predict-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .predict-title { font-size: 1rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .predict-close { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border); background: none; cursor: pointer; font-size: 14px; color: var(--text-sub); display: flex; align-items: center; justify-content: center; }
+  .predict-close:hover { background: var(--bg); }
+
+  .predict-market-strip {
+    display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;
+    padding: 12px 16px; background: var(--surface2); border-radius: 10px;
+    border: 1px solid var(--border);
+  }
+  .predict-market-item {
+    display: flex; flex-direction: column; align-items: center;
+    gap: 2px; min-width: 80px; flex: 1;
+  }
+  .predict-market-name { font-size: 0.68rem; color: var(--text-sub); font-weight: 600; letter-spacing: .04em; }
+  .predict-market-price { font-family: 'DM Mono', monospace; font-size: 0.85rem; font-weight: 600; color: var(--text); }
+  .predict-market-chg { font-family: 'DM Mono', monospace; font-size: 0.72rem; }
+  .predict-market-chg.up { color: var(--accent2); }
+  .predict-market-chg.down { color: var(--red); }
+
+  .predict-steps {
+    display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap;
+  }
+  .predict-step {
+    display: flex; align-items: center; gap: 5px; padding: 4px 10px;
+    border-radius: 20px; font-size: 0.72rem; font-weight: 500;
+    border: 1px solid var(--border); color: var(--text-sub);
+    background: var(--surface2); transition: all .3s;
+  }
+  .predict-step.done { background: #f0fdf4; border-color: #86efac; color: #16a34a; }
+  .predict-step.active { background: #eff6ff; border-color: #93c5fd; color: #2563eb; }
+  .predict-step.error { background: #fff1f2; border-color: #fecdd3; color: #e11d48; }
+  .predict-step-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  .predict-output {
+    min-height: 200px; max-height: 55vh; overflow-y: auto;
+    padding: 16px 18px; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: 10px;
+    font-size: 0.84rem; line-height: 1.8; color: var(--text);
+    scrollbar-width: thin; white-space: pre-wrap; font-family: inherit;
+  }
+  .predict-output h3 { font-size: 0.9rem; font-weight: 700; margin: 14px 0 6px; color: var(--text); }
+  .predict-output h3:first-child { margin-top: 0; }
+  .predict-output .bull { color: #16a34a; font-weight: 600; }
+  .predict-output .bear { color: var(--red); font-weight: 600; }
+  .predict-output .neutral { color: var(--accent3); font-weight: 600; }
+  .predict-cursor { display: inline-block; width: 2px; height: 1em; background: var(--accent); animation: blink 1s infinite; vertical-align: text-bottom; margin-left: 1px; }
+  @keyframes blink { 0%,100%{opacity:1}50%{opacity:0} }
+
+  .predict-disclaimer {
+    margin-top: 10px; padding: 8px 12px; background: #fffbeb;
+    border-radius: 7px; border: 1px solid #fde68a;
+    font-size: 0.7rem; color: #92400e; line-height: 1.5;
+  }
+  .predict-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
+  .predict-timestamp { font-size: 0.7rem; color: var(--text-sub); font-family: 'DM Mono', monospace; }
+  .predict-rerun-btn {
+    padding: 6px 14px; border-radius: 7px; border: 1px solid var(--border);
+    background: none; font-size: 0.78rem; color: var(--text-sub);
+    cursor: pointer; font-family: inherit; transition: all .15s;
+  }
+  .predict-rerun-btn:hover { border-color: var(--purple); color: var(--purple); }
+  .predict-rerun-btn:disabled { opacity: .5; cursor: not-allowed; }
+  .predict-no-key {
+    padding: 20px; text-align: center; color: var(--text-sub);
+    font-size: 0.85rem; line-height: 1.8;
+  }
 </style>
 
 <style>
@@ -327,6 +410,7 @@ if (sessionStorage.getItem('unlocked') === '1') {
       <span id="mktTxt" style="font-size:.78rem;font-weight:500">確認中...</span>
     </div>
     <div class="header-time" id="hdrTime">--:--:--</div>
+    <button class="predict-btn" id="predictBtn" onclick="openPredictModal()">🔮 翌日予測</button>
     <button class="settings-btn" onclick="openSettings()">⚙ 設定</button>
   </div>
 </header>
@@ -479,6 +563,73 @@ if (sessionStorage.getItem('unlocked') === '1') {
       <div class="links-grid" id="linksGrid"></div>
     </div>
 
+  </div>
+</div>
+
+<!-- PREDICTION MODAL -->
+<div class="modal-overlay" id="predictModal" onclick="if(event.target===this)closePredictModal()">
+  <div class="modal">
+    <div class="predict-header">
+      <div class="predict-title">🔮 翌日の値動き予測</div>
+      <button class="predict-close" onclick="closePredictModal()">✕</button>
+    </div>
+
+    <!-- 取得済みマーケットデータ表示 -->
+    <div class="predict-market-strip" id="predictMarketStrip">
+      <div style="font-size:.8rem;color:var(--text-sub);">データ取得中...</div>
+    </div>
+
+    <!-- ステップ表示 -->
+    <div class="predict-steps" id="predictSteps">
+      <div class="predict-step" id="pstep-market"><span class="predict-step-dot"></span>相場データ取得</div>
+      <div class="predict-step" id="pstep-news"><span class="predict-step-dot"></span>ニュース集計</div>
+      <div class="predict-step" id="pstep-score"><span class="predict-step-dot"></span>スコアリング</div>
+    </div>
+
+    <!-- スコア判定エリア -->
+    <div id="predictScoreArea" style="display:none;margin-bottom:12px;">
+      <div id="predictScoreCard" style="padding:14px 16px;border-radius:10px;border:2px solid;display:flex;align-items:center;gap:14px;"></div>
+    </div>
+
+    <!-- 出力エリア（ニュース要約＋根拠） -->
+    <div class="predict-output" id="predictOutput">
+      <div style="color:var(--text-sub);font-size:.85rem;">「分析を開始」ボタンを押してください。</div>
+    </div>
+
+    <!-- Claude.ai用プロンプトコピー -->
+    <div id="predictPromptBox" style="display:none;margin-top:10px;">
+      <div style="font-size:.73rem;color:var(--text-sub);margin-bottom:5px;font-weight:600;">
+        📋 Claude.ai でさらに深く分析 — 下のプロンプトをコピーして貼り付け
+      </div>
+      <div id="predictPromptText" style="
+        padding:10px 12px;background:#f8fafc;border:1px dashed var(--border);border-radius:8px;
+        font-size:.73rem;line-height:1.6;color:var(--text-sub);max-height:100px;overflow-y:auto;
+        scrollbar-width:thin;white-space:pre-wrap;font-family:'DM Mono',monospace;"></div>
+      <div style="display:flex;gap:6px;margin-top:6px;">
+        <button id="predictCopyBtn" onclick="copyPredictPrompt()" style="
+          flex:1;padding:7px;border-radius:7px;border:1px solid var(--purple);
+          background:#faf5ff;color:var(--purple);font-size:.78rem;font-weight:600;
+          cursor:pointer;font-family:inherit;transition:all .15s;">
+          📋 プロンプトをコピー
+        </button>
+        <a href="https://claude.ai" target="_blank" style="
+          flex:1;padding:7px;border-radius:7px;border:none;
+          background:linear-gradient(135deg,#7c3aed,#6366f1);color:white;
+          font-size:.78rem;font-weight:600;cursor:pointer;font-family:inherit;
+          text-decoration:none;display:flex;align-items:center;justify-content:center;gap:4px;">
+          Claude.ai を開く →
+        </a>
+      </div>
+    </div>
+
+    <div class="predict-disclaimer">
+      ⚠️ スコアリングはルールベースの参考指標です。投資判断はご自身の責任で行ってください。
+    </div>
+
+    <div class="predict-footer">
+      <span class="predict-timestamp" id="predictTimestamp"></span>
+      <button class="predict-rerun-btn" id="predictRerunBtn" onclick="runPrediction()">🔄 分析を開始</button>
+    </div>
   </div>
 </div>
 
@@ -1675,7 +1826,7 @@ async function addLinkItem() {
 // ============================================================
 document.addEventListener('keydown', e=>{
   if(e.key==='Escape') {
-    ['settingsModal','ytModal','linkModal','watchGroupModal'].forEach(id=>document.getElementById(id).classList.remove('open'));
+    ['settingsModal','ytModal','linkModal','watchGroupModal','predictModal'].forEach(id=>document.getElementById(id).classList.remove('open'));
   }
 });
 
@@ -1688,6 +1839,294 @@ async function initSupabase() {
   await loadSnMemos();
   await loadYtLinks();
   await loadSiteLinks();
+}
+
+// ============================================================
+// 翌日予測機能（ルールベース＋Claude.ai用プロンプト生成）
+// ============================================================
+
+const PREDICT_SYMBOLS = [
+  { sym: 'NQ%3DF',     name: 'NASDAQ先物', fmt: n => n.toLocaleString('en-US',{maximumFractionDigits:0}),  role: 'nq_fut' },
+  { sym: 'YM%3DF',     name: 'ダウ先物',   fmt: n => n.toLocaleString('en-US',{maximumFractionDigits:0}),  role: 'dj_fut' },
+  { sym: 'NIY%3DF',    name: '日経先物',   fmt: n => n.toLocaleString('ja-JP',{maximumFractionDigits:0}),  role: 'nk_fut' },
+  { sym: 'CL%3DF',     name: 'WTI原油',    fmt: n => '$' + n.toFixed(2),                                   role: 'oil' },
+  { sym: 'GC%3DF',     name: '金(GOLD)',   fmt: n => '$' + n.toLocaleString('en-US',{maximumFractionDigits:0}), role: 'gold' },
+  { sym: '%5EVIX',     name: 'VIX',        fmt: n => n.toFixed(2),                                         role: 'vix' },
+  { sym: '%5EN225',    name: '日経225',    fmt: n => n.toLocaleString('ja-JP',{maximumFractionDigits:0}),  role: 'nk' },
+  { sym: '%5EGSPC',    name: 'S&P500',     fmt: n => n.toLocaleString('en-US',{maximumFractionDigits:2}),  role: 'sp' },
+  { sym: 'USDJPY%3DX', name: 'ドル円',     fmt: n => n.toFixed(2),                                         role: 'usdjpy' },
+];
+
+function setStep(id, state) {
+  const el = document.getElementById('pstep-' + id);
+  if (!el) return;
+  el.className = 'predict-step' + (state !== 'idle' ? ' ' + state : '');
+}
+
+let predictRunning = false;
+let lastPromptText = '';
+
+function openPredictModal() {
+  document.getElementById('predictModal').classList.add('open');
+  // 初回自動実行
+  if (!document.getElementById('predictTimestamp').textContent) {
+    runPrediction();
+  }
+}
+
+function closePredictModal() {
+  document.getElementById('predictModal').classList.remove('open');
+}
+
+// ---- スコアリングロジック ----
+function calcScore(mkt, newsData) {
+  let score = 0;
+  const reasons = { bull: [], bear: [] };
+  const raw = mkt; // {role: {price, change, pct, up}}
+
+  // VIX（恐怖指数）
+  const vix = raw.vix;
+  if (vix) {
+    const v = vix.numPrice;
+    if (v < 15)      { score += 2; reasons.bull.push(`VIX ${v.toFixed(1)} — 極めて低く市場は安定`); }
+    else if (v < 20) { score += 1; reasons.bull.push(`VIX ${v.toFixed(1)} — 落ち着いた水準`); }
+    else if (v < 25) { score -= 1; reasons.bear.push(`VIX ${v.toFixed(1)} — やや不安心理が高まっている`); }
+    else if (v < 30) { score -= 2; reasons.bear.push(`VIX ${v.toFixed(1)} — 市場の警戒感が強い`); }
+    else             { score -= 3; reasons.bear.push(`VIX ${v.toFixed(1)} — 極めて高く恐慌的水準`); }
+  }
+
+  // NASDAQ先物
+  const nq = raw.nq_fut;
+  if (nq) {
+    const p = nq.pct;
+    if (p > 1)       { score += 2; reasons.bull.push(`NASDAQ先物 ${nq.change} — 強い上昇`); }
+    else if (p > 0)  { score += 1; reasons.bull.push(`NASDAQ先物 ${nq.change} — 小幅上昇`); }
+    else if (p > -1) { score -= 1; reasons.bear.push(`NASDAQ先物 ${nq.change} — 小幅軟調`); }
+    else             { score -= 2; reasons.bear.push(`NASDAQ先物 ${nq.change} — 大幅下落`); }
+  }
+
+  // ダウ先物
+  const dj = raw.dj_fut;
+  if (dj) {
+    const p = dj.pct;
+    if (p > 0.5)     { score += 1; reasons.bull.push(`ダウ先物 ${dj.change} — 上昇`); }
+    else if (p < -0.5){ score -= 1; reasons.bear.push(`ダウ先物 ${dj.change} — 下落`); }
+  }
+
+  // 日経先物
+  const nkf = raw.nk_fut;
+  if (nkf) {
+    const p = nkf.pct;
+    if (p > 1)       { score += 2; reasons.bull.push(`日経先物 ${nkf.change} — 強い上昇`); }
+    else if (p > 0)  { score += 1; reasons.bull.push(`日経先物 ${nkf.change} — 小幅上昇`); }
+    else if (p > -1) { score -= 1; reasons.bear.push(`日経先物 ${nkf.change} — 小幅下落`); }
+    else             { score -= 2; reasons.bear.push(`日経先物 ${nkf.change} — 大幅下落`); }
+  }
+
+  // ドル円（円安→日本株プラス）
+  const fx = raw.usdjpy;
+  if (fx) {
+    const p = fx.pct;
+    if (p > 0.5)      { score += 1; reasons.bull.push(`ドル円 ${fx.price} — 円安進行、輸出株にプラス`); }
+    else if (p < -0.5){ score -= 1; reasons.bear.push(`ドル円 ${fx.price} — 円高進行、輸出株に重荷`); }
+  }
+
+  // 原油（急騰は輸入コスト増でマイナス）
+  const oil = raw.oil;
+  if (oil) {
+    const p = oil.pct;
+    if (p > 3)       { score -= 1; reasons.bear.push(`WTI原油 ${oil.price} (${oil.change}) — 急騰、コスト高リスク`); }
+    else if (p < -3) { score += 1; reasons.bull.push(`WTI原油 ${oil.price} (${oil.change}) — 急落、インフレ緩和期待`); }
+  }
+
+  // ニューススコア
+  if (newsData) {
+    const trumpCount  = newsData.filter(n => n.tag === 'trump').length;
+    const mideastCount= newsData.filter(n => n.tag === 'mideast').length;
+    if (trumpCount >= 3)  { score -= 1; reasons.bear.push(`トランプ関連ニュース ${trumpCount}件 — 関税・地政学リスク警戒`); }
+    if (mideastCount >= 3){ score -= 1; reasons.bear.push(`中東関連ニュース ${mideastCount}件 — 地政学リスク高まる`); }
+    const bullNews = newsData.filter(n => n.tag === 'market' || n.tag === 'us').length;
+    if (bullNews >= 5)    { score += 1; reasons.bull.push(`国内・米国株ニュース ${bullNews}件 — 材料豊富`); }
+  }
+
+  return { score, reasons };
+}
+
+function scoreToJudge(score) {
+  if (score >= 5)       return { label: '強気 📈', emoji: '📈', color: '#16a34a', bg: '#f0fdf4', border: '#86efac' };
+  if (score >= 2)       return { label: 'やや強気 🟢', emoji: '🟢', color: '#2563eb', bg: '#eff6ff', border: '#93c5fd' };
+  if (score >= -1)      return { label: '中立 ⚖️', emoji: '⚖️', color: '#b45309', bg: '#fffbeb', border: '#fde68a' };
+  if (score >= -3)      return { label: 'やや弱気 🟠', emoji: '🟠', color: '#ea580c', bg: '#fff7ed', border: '#fdba74' };
+  return                       { label: '弱気 📉', emoji: '📉', color: '#dc2626', bg: '#fff1f2', border: '#fecdd3' };
+}
+
+async function runPrediction() {
+  if (predictRunning) return;
+  predictRunning = true;
+
+  const rerunBtn = document.getElementById('predictRerunBtn');
+  const predictBtn = document.getElementById('predictBtn');
+  rerunBtn.disabled = true;
+  predictBtn.disabled = true;
+  predictBtn.innerHTML = '<span class="spin">⏳</span> 分析中...';
+
+  ['market','news','score'].forEach(s => setStep(s, 'idle'));
+  document.getElementById('predictScoreArea').style.display = 'none';
+  document.getElementById('predictPromptBox').style.display = 'none';
+  document.getElementById('predictOutput').innerHTML = '';
+
+  const output = document.getElementById('predictOutput');
+
+  // ---- STEP 1: マーケットデータ取得 ----
+  setStep('market', 'active');
+  output.innerHTML = '<span style="color:var(--text-sub);font-size:.85rem;">📡 先物・VIXデータを取得中...</span>';
+
+  const mktRaw = {};
+  try {
+    const results = await Promise.all(PREDICT_SYMBOLS.map(fetchOneTicker));
+    const strip = document.getElementById('predictMarketStrip');
+    const validItems = [];
+
+    PREDICT_SYMBOLS.forEach((sym, i) => {
+      const r = results[i];
+      if (!r) return;
+      // pct数値を別途保持
+      const pctNum = parseFloat(r.change.replace('%','').replace('+',''));
+      mktRaw[sym.role] = { ...r, numPrice: parseFloat(r.price.replace(/[^0-9.]/g,'')), pct: pctNum };
+      validItems.push({ sym, r });
+    });
+
+    strip.innerHTML = validItems.map(({sym, r}) => `
+      <div class="predict-market-item">
+        <span class="predict-market-name">${sym.name}</span>
+        <span class="predict-market-price">${r.price}</span>
+        <span class="predict-market-chg ${r.up ? 'up' : 'down'}">${r.change}</span>
+      </div>
+    `).join('') || '<span style="font-size:.78rem;color:var(--text-sub);">データ取得失敗</span>';
+
+    setStep('market', 'done');
+  } catch(e) {
+    setStep('market', 'error');
+    console.warn('Market fetch error:', e);
+  }
+
+  // ---- STEP 2: ニュース集計 ----
+  setStep('news', 'active');
+  output.innerHTML = '<span style="color:var(--text-sub);font-size:.85rem;">📰 ニュースを集計中...</span>';
+  await new Promise(r => setTimeout(r, 300)); // 少し待機
+
+  const recentNews = (allNews || []).sort((a,b) => b.dt - a.dt).slice(0, 30);
+  setStep('news', 'done');
+
+  // ---- STEP 3: スコアリング ----
+  setStep('score', 'active');
+  output.innerHTML = '<span style="color:var(--text-sub);font-size:.85rem;">🧮 スコアリング中...</span>';
+  await new Promise(r => setTimeout(r, 200));
+
+  const { score, reasons } = calcScore(mktRaw, recentNews);
+  const judge = scoreToJudge(score);
+
+  // スコアカード表示
+  const scoreArea = document.getElementById('predictScoreArea');
+  scoreArea.style.display = 'block';
+  document.getElementById('predictScoreCard').style.cssText =
+    `padding:14px 16px;border-radius:10px;border:2px solid ${judge.border};display:flex;align-items:center;gap:14px;background:${judge.bg};`;
+  document.getElementById('predictScoreCard').innerHTML = `
+    <div style="font-size:2rem;line-height:1;">${judge.emoji}</div>
+    <div style="flex:1;">
+      <div style="font-size:1.05rem;font-weight:700;color:${judge.color};">${judge.label}</div>
+      <div style="font-size:.72rem;color:var(--text-sub);margin-top:2px;">スコア: ${score > 0 ? '+' : ''}${score} / 各指標の自動評価</div>
+    </div>
+  `;
+
+  // 根拠テキスト
+  let outputHtml = '';
+  if (reasons.bull.length > 0) {
+    outputHtml += `<div style="font-weight:700;color:#16a34a;margin-bottom:6px;">📈 ポジティブ要因</div>`;
+    outputHtml += reasons.bull.map(r => `<div style="padding:3px 0;padding-left:12px;border-left:2px solid #86efac;margin-bottom:4px;font-size:.83rem;">✅ ${r}</div>`).join('');
+  }
+  if (reasons.bear.length > 0) {
+    outputHtml += `<div style="font-weight:700;color:#dc2626;margin:10px 0 6px;">📉 ネガティブ要因</div>`;
+    outputHtml += reasons.bear.map(r => `<div style="padding:3px 0;padding-left:12px;border-left:2px solid #fca5a5;margin-bottom:4px;font-size:.83rem;">⚠️ ${r}</div>`).join('');
+  }
+
+  // 直近ニュース一覧
+  if (recentNews.length > 0) {
+    outputHtml += `<div style="font-weight:700;color:var(--text-sub);margin:12px 0 6px;font-size:.78rem;">📰 収集ニュース（直近${Math.min(recentNews.length,15)}件）</div>`;
+    outputHtml += recentNews.slice(0,15).map(n => {
+      const tagColors = { trump:'#dc2626', mideast:'#059669', market:'#2563eb', us:'#9333ea', macro:'#ea580c', sector:'#16a34a' };
+      const c = tagColors[n.tag] || '#64748b';
+      return `<div style="padding:3px 0 3px 8px;border-left:2px solid ${c};margin-bottom:3px;font-size:.78rem;color:var(--text-sub);">${n.title}</div>`;
+    }).join('');
+  }
+
+  output.innerHTML = outputHtml || '<div style="color:var(--text-sub);font-size:.83rem;">データが不足しています。ニュースが読み込まれていることを確認してください。</div>';
+
+  // ---- Claude.ai用プロンプト生成 ----
+  const now = new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
+  const mktLines = PREDICT_SYMBOLS.map(s => {
+    const d = mktRaw[s.role];
+    return d ? `${s.name}: ${d.price} (${d.change})` : null;
+  }).filter(Boolean).join('\n');
+  const newsLines = recentNews.slice(0,20).map(n => `・[${n.tag}] ${n.title}`).join('\n');
+
+  lastPromptText =
+`あなたは日本株式市場のベテランアナリストです。以下のデータをもとに翌営業日の日本株市場予測レポートを作成してください。
+
+【分析時刻】${now}
+
+【マーケットデータ】
+${mktLines}
+
+【直近ニュース】
+${newsLines || '（なし）'}
+
+【レポート形式】
+1. 総合判断（強気/やや強気/中立/やや弱気/弱気）とその根拠
+2. 主なポジティブ要因（3〜5項目）
+3. 主なネガティブ要因（3〜5項目）
+4. 注目指標・銘柄・イベント
+5. 日経平均の想定レンジ（上下シナリオ）
+6. アナリスト一言コメント
+
+※投資は自己責任であることを末尾に記載すること。`;
+
+  document.getElementById('predictPromptText').textContent = lastPromptText;
+  document.getElementById('predictPromptBox').style.display = 'block';
+
+  setStep('score', 'done');
+  document.getElementById('predictTimestamp').textContent =
+    '集計: ' + new Date().toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo' });
+
+  predictRunning = false;
+  rerunBtn.disabled = false;
+  rerunBtn.textContent = '🔄 再実行';
+  predictBtn.disabled = false;
+  predictBtn.innerHTML = '🔮 翌日予測';
+}
+
+async function copyPredictPrompt() {
+  try {
+    await navigator.clipboard.writeText(lastPromptText);
+    const btn = document.getElementById('predictCopyBtn');
+    btn.textContent = '✅ コピーしました！';
+    btn.style.background = '#f0fdf4';
+    btn.style.borderColor = '#86efac';
+    btn.style.color = '#16a34a';
+    setTimeout(() => {
+      btn.textContent = '📋 プロンプトをコピー';
+      btn.style.background = '#faf5ff';
+      btn.style.borderColor = 'var(--purple)';
+      btn.style.color = 'var(--purple)';
+    }, 2000);
+  } catch {
+    // fallback: select text
+    const el = document.getElementById('predictPromptText');
+    const range = document.createRange();
+    range.selectNode(el);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(range);
+  }
 }
 
 loadCfg();
