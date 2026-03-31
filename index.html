@@ -1264,8 +1264,8 @@ let watchGroups = [];
 let currentWatchGroup = 'all';
 
 function loadWatchData() {
+  // localStorage fallback（Supabase未設定時のみ使用）
   watchList   = JSON.parse(localStorage.getItem('watchlist_local') || '[]');
-  // 壊れた銘柄名（HTMLが混入しているもの）をクリーンアップ
   watchList = watchList.map(w => {
     if (w.name && w.name.length > 50) w.name = w.ticker;
     return w;
@@ -1275,16 +1275,23 @@ function loadWatchData() {
 }
 
 function saveWatchData() {
+  // Supabase未設定時のみlocalStorageに保存
+  if (CFG.sbUrl && CFG.sbKey) return;
   localStorage.setItem('watchlist_local', JSON.stringify(watchList));
   localStorage.setItem('watch_groups',    JSON.stringify(watchGroups.filter(g => g.id !== 'all')));
 }
 
 async function loadWatchList() {
   if (CFG.sbUrl && CFG.sbKey) {
-    const data = await sbFetch('watchlist?select=*&order=added_at.desc');
-    if (data) watchList = data;
+    const [wData, gData] = await Promise.all([
+      sbFetch('watchlist?select=*&order=added_at.desc'),
+      sbFetch('watch_groups?select=*&order=sort_order.asc'),
+    ]);
+    watchList   = wData  || [];
+    watchGroups = [{ id:'all', name:'すべて' }, ...(gData || [])];
+  } else {
+    loadWatchData();
   }
-  loadWatchData();
   renderWatchGroups();
   renderWatchList();
   if (watchList.length) fetchAllWatchPrices();
@@ -1371,21 +1378,48 @@ function renderWatchGroupList() {
         </div>
       </div>`).join('');
 }
-function addWatchGroup() {
+async function addWatchGroup() {
   const name = document.getElementById('watchGroupNameInput').value.trim();
   if (!name) return;
-  watchGroups.push({ id: 'g_' + Date.now(), name });
-  saveWatchData();
+  const newGroup = { id: 'g_' + Date.now(), name, sort_order: watchGroups.length };
+
+  if (CFG.sbUrl && CFG.sbKey) {
+    const res = await sbFetch('watch_groups', { method:'POST', body:JSON.stringify(newGroup) });
+    const saved = Array.isArray(res) ? res[0] : (res && res.id ? res : newGroup);
+    watchGroups.push(saved);
+  } else {
+    watchGroups.push(newGroup);
+    saveWatchData();
+  }
   document.getElementById('watchGroupNameInput').value = '';
   renderWatchGroups();
   renderWatchGroupList();
 }
-function deleteWatchGroup(id) {
+
+async function deleteWatchGroup(id) {
   if (!confirm(`グループを削除しますか？\n（銘柄は「すべて」に移動します）`)) return;
+
+  if (CFG.sbUrl && CFG.sbKey) {
+    // グループ内の銘柄のgroupIdをnullに更新
+    const targets = watchList.filter(w => w.groupId === id);
+    for (const w of targets) {
+      await sbFetch(`watchlist?id=eq.${w.id}`, { method:'PATCH', body:JSON.stringify({ groupId: null }) });
+    }
+    // グループ削除
+    const grp = watchGroups.find(g => g.id === id);
+    if (grp && grp.id && !String(grp.id).startsWith('g_')) {
+      await sbFetch(`watch_groups?id=eq.${grp.id}`, { method:'DELETE' });
+    } else {
+      // idがg_で始まるローカルIDの場合はnameで検索して削除
+      await sbFetch(`watch_groups?id=eq.${encodeURIComponent(id)}`, { method:'DELETE' });
+    }
+  }
+
   watchList.forEach(w => { if (w.groupId === id) delete w.groupId; });
   watchGroups = watchGroups.filter(g => g.id !== id);
   if (currentWatchGroup === id) currentWatchGroup = 'all';
-  saveWatchData();
+
+  if (!(CFG.sbUrl && CFG.sbKey)) saveWatchData();
   renderWatchGroups();
   renderWatchGroupList();
   renderWatchList();
@@ -1423,11 +1457,12 @@ async function addWatch() {
 
   if (CFG.sbUrl && CFG.sbKey) {
     const res = await sbFetch('watchlist', { method:'POST', body:JSON.stringify(item) });
-    watchList.unshift(res && Array.isArray(res) ? res[0] : item);
+    const saved = Array.isArray(res) ? res[0] : (res && res.id ? res : item);
+    watchList.unshift(saved);
   } else {
     watchList.unshift(item);
+    saveWatchData();
   }
-  saveWatchData();
   btn.textContent = '＋ 追加'; btn.disabled = false;
   document.getElementById('watchTickerInput').value = '';
   renderWatchGroups();
@@ -1436,10 +1471,12 @@ async function addWatch() {
 }
 
 async function removeWatch(ticker) {
-  if (CFG.sbUrl && CFG.sbKey) await sbFetch(`watchlist?ticker=eq.${encodeURIComponent(ticker)}`, { method:'DELETE' });
+  if (CFG.sbUrl && CFG.sbKey) {
+    await sbFetch(`watchlist?ticker=eq.${encodeURIComponent(ticker)}`, { method:'DELETE' });
+  }
   watchList = watchList.filter(w => w.ticker !== ticker);
   delete watchPrices[ticker];
-  saveWatchData();
+  if (!(CFG.sbUrl && CFG.sbKey)) saveWatchData();
   renderWatchGroups();
   renderWatchList();
 }
