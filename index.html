@@ -1484,7 +1484,8 @@ async function addWatch() {
   const btn = document.querySelector('.watch-add-btn');
   btn.textContent = '取得中...'; btn.disabled = true;
 
-  const isJP = /^\d{4}$/.test(val);
+  // 日本株判定：4桁数字 または 数字+英字混合4文字（例: 166A, 175A）
+  const isJP = /^\d{4}$/.test(val) || /^[0-9][0-9A-Z]{3}$/.test(val.toUpperCase());
   const sym  = isJP ? val + '.T' : val.toUpperCase();
   let name   = val.toUpperCase();
   try {
@@ -1538,9 +1539,11 @@ async function removeWatch(ticker) {
 }
 
 // ===== 価格取得 =====
+const isJPCode = t => /^\d{4}$/.test(t) || /^[0-9][0-9A-Z]{3}$/.test(t.toUpperCase());
+
 async function fetchAllWatchPrices() {
   for (const w of watchList) {
-    const sym = w.sym || (/^\d{4}$/.test(w.ticker) ? w.ticker+'.T' : w.ticker);
+    const sym = w.sym || (isJPCode(w.ticker) ? w.ticker + '.T' : w.ticker);
     try {
       const data   = await fetchYahooChart(sym, '10d');
       const result = data?.chart?.result?.[0];
@@ -1646,11 +1649,20 @@ function renderWatchList() {
       const p = watchPrices[w.ticker];
       const snLink = snUrl ? `<a class="watch-action-btn watch-sn-btn" href="${snUrl}?q=${w.ticker}" target="_blank">SN</a>` : '';
 
-      // ニュースバッジ
+      // ニュースバッジ — 取得済みなら常に表示
       const news = watchNews[w.ticker];
-      const newsBadge = (news && news.length)
-        ? `<span class="watch-news-badge" onclick="openNewsPopup('${w.ticker}',event)" title="${news.length}件の新着ニュース">📰${news.length}</span>`
-        : '';
+      let newsBadge = '';
+      if (news === undefined) {
+        // まだ取得中 → 小さなインジケータ
+        newsBadge = `<span style="font-size:.65rem;color:var(--text-sub);">📰</span>`;
+      } else if (news === 'none' || (Array.isArray(news) && news.length === 0)) {
+        // 1ヶ月以内ニュースなし → グレーバッジ
+        newsBadge = `<span onclick="openNewsPopup('${w.ticker}',event)" title="直近1ヶ月のニュースなし"
+          style="font-size:.65rem;color:var(--text-sub);cursor:pointer;">📭</span>`;
+      } else {
+        // ニュースあり → 赤バッジ（件数表示）
+        newsBadge = `<span class="watch-news-badge" onclick="openNewsPopup('${w.ticker}',event)" title="${news.length}件のニュース">📰${news.length}</span>`;
+      }
 
       // メモ価格 vs 現在値 騰落率
       let memoPctHtml = '<span class="watch-memo-pct flat">--</span>';
@@ -1707,23 +1719,22 @@ async function saveMemoPrice(ticker, value) {
 }
 
 // ===== ニュースアラート =====
-let watchNews = {}; // { ticker: [{title, link, dt}] }
+let watchNews = {}; // { ticker: [{title, link, dt}] | 'none' }
 let watchNewsPopupEl = null;
 
 async function fetchWatchNews() {
   if (!watchList.length) return;
-  const seenKey = 'watch_news_seen';
-  const seen = JSON.parse(localStorage.getItem(seenKey) || '{}');
+  const oneMonthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
   for (const w of watchList) {
-    const query = encodeURIComponent(`${w.name || w.ticker} 株 決算 開示 site:kabutan.jp OR site:minkabu.jp`);
+    const query = encodeURIComponent(`${w.name || w.ticker} 株 決算 開示`);
     const rssUrl = `https://news.google.com/rss/search?q=${query}&hl=ja&gl=JP&ceid=JP:ja`;
     try {
       const proxyUrl = PROXY + encodeURIComponent(rssUrl);
       const res  = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
       const text = await res.text();
       const blocks = [...text.matchAll(/<item>([\s\S]*?)<\/item>/gi)].map(m => m[1]);
-      const items = blocks.slice(0, 5).map(block => {
+      const items = blocks.slice(0, 10).map(block => {
         const titleM = block.match(/<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>|<title>([\s\S]*?)<\/title>/i);
         let title = (titleM?.[1] ?? titleM?.[2] ?? '').trim()
           .replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
@@ -1733,14 +1744,15 @@ async function fetchWatchNews() {
         if (linkM) link = linkM[1].trim();
         if (!link) { const g = block.match(/<guid[^>]*>(https?:\/\/[^\s<]+)<\/guid>/i); if(g) link = g[1].trim(); }
         const pubM = block.match(/<pubDate>([\s\S]*?)<\/pubDate>/i);
-        const dt = pubM ? new Date(pubM[1].trim()) : new Date();
+        const dt = pubM ? new Date(pubM[1].trim()) : new Date(0);
         return { title, link, dt };
-      }).filter(n => n.title && n.link);
+      })
+        .filter(n => n.title && n.link)
+        .filter(n => n.dt >= oneMonthAgo)   // 1ヶ月以内のみ
+        .sort((a, b) => b.dt - a.dt);        // 新しい順
 
-      // 前回見たニュースより新しいものだけ抽出
-      const lastSeen = seen[w.ticker] ? new Date(seen[w.ticker]) : new Date(0);
-      const fresh = items.filter(n => n.dt > lastSeen);
-      if (fresh.length) watchNews[w.ticker] = fresh;
+      // 0件でも 'none' としてセット（「ニュースなし」表示用）
+      watchNews[w.ticker] = items.length > 0 ? items : 'none';
     } catch(e) { /* 無視 */ }
   }
   renderWatchList();
@@ -1750,33 +1762,38 @@ function openNewsPopup(ticker, event) {
   event.stopPropagation();
   closeNewsPopup();
 
-  const news = watchNews[ticker] || [];
+  const news = watchNews[ticker];
   const w = watchList.find(x => x.ticker === ticker);
-  if (!news.length) return;
-
-  // 既読マーク
-  const seen = JSON.parse(localStorage.getItem('watch_news_seen') || '{}');
-  seen[ticker] = new Date().toISOString();
-  localStorage.setItem('watch_news_seen', JSON.stringify(seen));
-  delete watchNews[ticker];
 
   const popup = document.createElement('div');
   popup.className = 'watch-news-popup';
   popup.id = 'watchNewsPopup';
-  popup.innerHTML = `
-    <div class="watch-news-popup-header">
-      <span class="watch-news-popup-title">📰 ${w ? (w.name || ticker) : ticker} の新着</span>
-      <button class="watch-news-popup-close" onclick="closeNewsPopup()">✕</button>
-    </div>
-    ${news.map(n => `
+
+  const nameLabel = w ? (w.name || ticker) : ticker;
+
+  let bodyHtml;
+  if (!news || news === 'none' || (Array.isArray(news) && news.length === 0)) {
+    bodyHtml = `<div style="padding:20px 16px;font-size:.83rem;color:var(--text-sub);text-align:center;">
+      📭 直近1ヶ月のニュースはありません
+    </div>`;
+  } else {
+    bodyHtml = news.map(n => `
       <a class="watch-news-popup-item" href="${n.link}" target="_blank" rel="noopener">
         <div class="watch-news-popup-ttl">${n.title}</div>
-        <div class="watch-news-popup-time">${timeAgo(n.dt)}</div>
+        <div class="watch-news-popup-time">${timeAgo(n.dt)} · ${n.dt.toLocaleDateString('ja-JP')}</div>
       </a>
-    `).join('')}
+    `).join('');
+  }
+
+  popup.innerHTML = `
+    <div class="watch-news-popup-header">
+      <span class="watch-news-popup-title">📰 ${nameLabel} のニュース</span>
+      <button class="watch-news-popup-close" onclick="closeNewsPopup()">✕</button>
+    </div>
+    ${bodyHtml}
   `;
 
-  // ポップアップ位置（クリック位置の近く）
+  // ポップアップ位置
   document.body.appendChild(popup);
   const rect = event.target.getBoundingClientRect();
   const top  = Math.min(rect.bottom + 8, window.innerHeight - 440);
@@ -1784,9 +1801,6 @@ function openNewsPopup(ticker, event) {
   popup.style.top  = Math.max(8, top)  + 'px';
   popup.style.left = Math.max(8, left) + 'px';
   watchNewsPopupEl = popup;
-
-  // バッジを消す
-  renderWatchList();
 
   // 外クリックで閉じる
   setTimeout(() => document.addEventListener('click', closeNewsPopupOnOutside), 10);
