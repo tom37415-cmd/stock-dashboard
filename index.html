@@ -1543,7 +1543,18 @@ const isJPCode = t => /^\d{4}$/.test(t) || /^[0-9][0-9A-Z]{3}$/.test(t.toUpperCa
 
 async function fetchAllWatchPrices() {
   for (const w of watchList) {
-    const sym = w.sym || (isJPCode(w.ticker) ? w.ticker + '.T' : w.ticker);
+    // DBに誤った sym（.T なし）が保存されている場合を修正
+    let sym = w.sym || '';
+    if (isJPCode(w.ticker) && !sym.endsWith('.T')) {
+      sym = w.ticker + '.T';
+      // DB上のsymも修正
+      w.sym = sym;
+      if (CFG.sbUrl && CFG.sbKey && w.id) {
+        sbFetch(`watchlist?id=eq.${w.id}`, { method:'PATCH', body:JSON.stringify({ sym }) });
+      }
+    } else if (!sym) {
+      sym = w.ticker;
+    }
     try {
       const data   = await fetchYahooChart(sym, '10d');
       const result = data?.chart?.result?.[0];
