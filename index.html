@@ -1349,7 +1349,13 @@ async function fetchYahooChart(sym, range='5d') {
   const proxyUrl = PROXY + encodeURIComponent(url);
   const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
   const text = await res.text();
-  return JSON.parse(text);
+  // Cloudflare Workerはそのまま返す、alloriginsは {contents:'...'} 形式
+  try {
+    const json = JSON.parse(text);
+    // allorigins形式の場合
+    if (json.contents) return JSON.parse(json.contents);
+    return json;
+  } catch { return null; }
 }
 
 // 日本株の日本語銘柄名を株探から取得
@@ -1488,12 +1494,16 @@ async function addWatch() {
       else {
         const data = await fetchYahooChart(sym, '1d');
         const meta = data?.chart?.result?.[0]?.meta;
-        if (meta) name = meta.longName || meta.shortName || name;
+        if (meta) name = meta.shortName || meta.longName || name;
       }
     } else {
+      // 米国株・ETF等：shortName → longName の順で取得
       const data = await fetchYahooChart(sym, '1d');
       const meta = data?.chart?.result?.[0]?.meta;
-      if (meta) name = meta.longName || meta.shortName || name;
+      if (meta) {
+        const n = meta.shortName || meta.longName || '';
+        if (n && n.length > 0) name = n;
+      }
     }
   } catch {}
 
@@ -1574,9 +1584,14 @@ async function fetchAllWatchPrices() {
       const weekPct = weekBar ? ((lastBar.c - weekBar.c) / weekBar.c * 100) : null;
 
       // 銘柄名更新
-      if (!w.name || w.name === w.ticker) {
-        if (sym.endsWith('.T')) { const jpName = await resolveJapaneseName(w.ticker); if (jpName) w.name = jpName; }
-        else { const rn = meta.longName || meta.shortName; if (rn) w.name = rn; }
+      if (!w.name || w.name === w.ticker || w.name === w.ticker.toUpperCase()) {
+        if (sym.endsWith('.T')) {
+          const jpName = await resolveJapaneseName(w.ticker);
+          if (jpName) w.name = jpName;
+        } else {
+          const rn = meta.shortName || meta.longName;
+          if (rn && rn.length > 0) w.name = rn;
+        }
       }
 
       const isJP = sym.endsWith('.T');
