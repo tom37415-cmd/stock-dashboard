@@ -1485,9 +1485,10 @@ async function addWatch() {
   btn.textContent = '取得中...'; btn.disabled = true;
 
   // 日本株判定：4桁数字 または 数字+英字混合4文字（例: 166A, 175A）
-  const isJP = /^\d{4}$/.test(val) || /^[0-9][0-9A-Z]{3}$/.test(val.toUpperCase());
-  const sym  = isJP ? val + '.T' : val.toUpperCase();
-  let name   = val.toUpperCase();
+  const ticker = val.toUpperCase();
+  const isJP = isJPCode(ticker);
+  const sym  = isJP ? ticker + '.T' : ticker;
+  let name   = ticker;
   try {
     if (isJP) {
       const jpName = await resolveJapaneseName(val);
@@ -1510,7 +1511,7 @@ async function addWatch() {
 
   const sel     = document.getElementById('watchGroupSelect');
   const groupId = sel.value || undefined;
-  const item    = { ticker: val.toUpperCase(), sym, name, groupId, added_at: new Date().toISOString() };
+  const item    = { ticker, sym, name, groupId, added_at: new Date().toISOString() };
 
   if (CFG.sbUrl && CFG.sbKey) {
     const res = await sbFetch('watchlist', { method:'POST', body:JSON.stringify(item) });
