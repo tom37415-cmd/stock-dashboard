@@ -1658,11 +1658,56 @@ async function fetchAllWatchPrices() {
         dayUp:    dayPct  != null ? dayPct  >= 0 : null,
         weekUp:   weekPct != null ? weekPct >= 0 : null,
         isJP,
+        per: null, perAvg: null, // PERは非同期で後から取得
       };
+
+      // PER取得（日本株のみ・非同期で並行実行）
+      if (isJP) fetchPER(w.ticker, sym);
+
     } catch(e) { console.warn('WatchPrice error:', w.ticker, e); }
   }
   saveWatchData();
   renderWatchList();
+}
+
+// ===== PER取得 =====
+async function fetchPER(ticker, sym) {
+  try {
+    // ① 現在PER：Yahoo Finance quoteSummary の trailingPE
+    const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${sym}?modules=summaryDetail,defaultKeyStatistics,earnings`;
+    const proxyUrl = PROXY + encodeURIComponent(url);
+    const res  = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) });
+    const text = await res.text();
+    const json = JSON.parse(text);
+    const sd   = json?.quoteSummary?.result?.[0]?.summaryDetail;
+    const ks   = json?.quoteSummary?.result?.[0]?.defaultKeyStatistics;
+
+    const trailingPE = sd?.trailingPE?.raw ?? ks?.trailingPE?.raw ?? null;
+    if (trailingPE == null) return;
+
+    // ② 1年平均PER：過去1年の週次終値 ÷ EPS (trailingEps) の平均
+    const eps = ks?.trailingEps?.raw ?? null;
+    let perAvg = null;
+    if (eps && eps > 0) {
+      const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1wk&range=1y`;
+      const cRes  = await fetch(PROXY + encodeURIComponent(chartUrl), { signal: AbortSignal.timeout(10000) });
+      const cText = await cRes.text();
+      const cJson = JSON.parse(cText);
+      const closes = cJson?.chart?.result?.[0]?.indicators?.quote?.[0]?.close || [];
+      const validCloses = closes.filter(c => c != null && c > 0);
+      if (validCloses.length > 0) {
+        const avgPrice = validCloses.reduce((s, c) => s + c, 0) / validCloses.length;
+        perAvg = avgPrice / eps;
+      }
+    }
+
+    // watchPricesに反映して再描画
+    if (watchPrices[ticker]) {
+      watchPrices[ticker].per    = trailingPE;
+      watchPrices[ticker].perAvg = perAvg;
+      renderWatchList();
+    }
+  } catch(e) { console.warn('PER fetch error:', ticker, e); }
 }
 
 // ===== 描画 =====
@@ -1733,6 +1778,9 @@ function renderWatchList() {
                 ${w.name||w.ticker}
               </div>
               <div class="watch-ticker-code">${w.ticker}</div>
+              ${p && p.per != null ? `<div style="font-size:.68rem;color:var(--text-sub);margin-top:2px;font-family:'DM Mono',monospace;">
+                PER <span style="color:var(--text);font-weight:600;">${p.per.toFixed(1)}倍</span>${p.perAvg != null ? `<span style="color:var(--text-sub);"> / 平均 ${p.perAvg.toFixed(1)}倍</span>` : ''}
+              </div>` : ''}
             </div>
             ${newsBadge}
           </div>
