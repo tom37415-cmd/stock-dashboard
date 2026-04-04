@@ -1358,37 +1358,20 @@ async function fetchYahooChart(sym, range='5d') {
   } catch { return null; }
 }
 
-// 日本株の日本語銘柄名を取得（Yahoo Finance search → みんかぶ の順でフォールバック）
+// 日本株の日本語銘柄名を取得（みんかぶのタイトルから抽出）
 async function resolveJapaneseName(code) {
-  // ① Yahoo Finance v1/search で日本語shortNameを試みる
-  try {
-    const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${code}.T&lang=ja&region=JP&quotesCount=1&newsCount=0`;
-    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
-    const res  = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
-    const json = await res.json();
-    const data = JSON.parse(json.contents || '{}');
-    const quote = data?.finance?.result?.[0]?.quotes?.[0];
-    if (quote) {
-      // shortNameが日本語（ひらがな・カタカナ・漢字を含む）ならそれを使う
-      const n = quote.shortname || quote.longname || '';
-      if (/[\u3000-\u9fff\uff00-\uffef]/.test(n)) return n;
-    }
-  } catch {}
-
-  // ② みんかぶのRSS検索で銘柄名を取得
   try {
     const rssUrl = `https://minkabu.jp/stock/${code}`;
     const proxyUrl = PROXY + encodeURIComponent(rssUrl);
     const res  = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
     const html = await res.text();
-    // <title>銘柄名【コード】 の形式
-    const m = html.match(/<title[^>]*>\s*([^【（\n]+)[【（]/);
+    // <title>銘柄名（コード） の形式
+    const m = html.match(/<title[^>]*>\s*([^（\(\n]+)[（\(]/);
     if (m && m[1]) {
       const name = m[1].trim();
       if (name && /[\u3000-\u9fff\uff00-\uffef]/.test(name)) return name;
     }
   } catch {}
-
   return null;
 }
 
