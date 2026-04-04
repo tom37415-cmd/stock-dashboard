@@ -1398,10 +1398,18 @@ function renderWatchGroups() {
     ? userGroups.map(g => `<option value="${g.id}">${g.name}</option>`).join('')
     : `<option value="">グループなし</option>`;
   sel.style.display = userGroups.length ? '' : 'none';
+
+  // 現在表示中のグループをセレクトに反映（allの場合は先頭のまま）
+  if (currentWatchGroup !== 'all' && userGroups.find(g => g.id === currentWatchGroup)) {
+    sel.value = currentWatchGroup;
+  }
 }
 
 function switchWatchGroup(groupId) {
   currentWatchGroup = groupId;
+  // セレクトも連動
+  const sel = document.getElementById('watchGroupSelect');
+  if (groupId !== 'all' && sel) sel.value = groupId;
   renderWatchGroups();
   renderWatchList();
 }
