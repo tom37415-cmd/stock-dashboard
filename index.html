@@ -120,7 +120,13 @@
   .watch-table td:not(:first-child) { text-align: right; font-family: 'DM Mono', monospace; }
   .watch-table tr:last-child td { border-bottom: none; }
   .watch-table tr:hover td { background: var(--surface2); }
-  .watch-ticker-name { font-weight: 600; font-size: 0.88rem; }
+  .watch-ticker-name { font-weight: 600; font-size: 0.88rem; cursor: pointer; }
+  .watch-ticker-name:hover { color: var(--accent); text-decoration: underline dotted; }
+  .watch-name-input {
+    font-weight: 600; font-size: 0.88rem; width: 120px;
+    padding: 2px 6px; border-radius: 5px; border: 1.5px solid var(--accent);
+    font-family: inherit; outline: none; background: var(--surface);
+  }
   .watch-ticker-code { font-size: 0.72rem; color: var(--text-sub); font-family: 'DM Mono', monospace; }
   .watch-price { font-weight: 500; }
   .watch-change.up { color: var(--accent2); }
@@ -1358,20 +1364,37 @@ async function fetchYahooChart(sym, range='5d') {
   } catch { return null; }
 }
 
-// 日本株の日本語銘柄名を取得（みんかぶのタイトルから抽出）
+// 日本株の日本語銘柄名を取得
 async function resolveJapaneseName(code) {
+  // Yahoo Finance Japan のニュースRSSから銘柄名を取得
   try {
-    const rssUrl = `https://minkabu.jp/stock/${code}`;
+    const rssUrl = `https://finance.yahoo.co.jp/rss/news?code=${code}`;
     const proxyUrl = PROXY + encodeURIComponent(rssUrl);
     const res  = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
-    const html = await res.text();
-    // <title>銘柄名（コード） の形式
-    const m = html.match(/<title[^>]*>\s*([^（\(\n]+)[（\(]/);
+    const text = await res.text();
+    // <title>銘柄名 - Yahoo!ファイナンス</title> または channel title から抽出
+    const m = text.match(/<title><!\[CDATA\[([^\]]+?)(?:\s*-\s*Yahoo|のニュース|\s*\(|\s*【)/)
+           || text.match(/<title>([^<]+?)(?:\s*-\s*Yahoo|のニュース|\s*\(|\s*【)/);
     if (m && m[1]) {
       const name = m[1].trim();
-      if (name && /[\u3000-\u9fff\uff00-\uffef]/.test(name)) return name;
+      if (name && /[\u3040-\u9fff]/.test(name) && name.length < 40) return name;
     }
   } catch {}
+
+  // フォールバック：Google News RSSの最初のアイテムタイトルから銘柄名を推測
+  try {
+    const rssUrl = `https://news.google.com/rss/search?q=${code}+株&hl=ja&gl=JP&ceid=JP:ja`;
+    const proxyUrl = PROXY + encodeURIComponent(rssUrl);
+    const res  = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
+    const text = await res.text();
+    // チャンネルタイトルから銘柄名を取得
+    const m = text.match(/<channel>[\s\S]*?<title><!\[CDATA\[([^\]]+)\]\]>/);
+    if (m && m[1]) {
+      const name = m[1].replace(/\s*-\s*Google.*$/,'').trim();
+      if (name && /[\u3040-\u9fff]/.test(name) && name.length < 40) return name;
+    }
+  } catch {}
+
   return null;
 }
 
@@ -1704,7 +1727,11 @@ function renderWatchList() {
         <td>
           <div style="display:flex;align-items:center;gap:6px;">
             <div>
-              <div class="watch-ticker-name">${w.name||w.ticker}</div>
+              <div class="watch-ticker-name"
+                title="クリックで銘柄名を編集"
+                onclick="startEditName('${w.ticker}', this)">
+                ${w.name||w.ticker}
+              </div>
               <div class="watch-ticker-code">${w.ticker}</div>
             </div>
             ${newsBadge}
@@ -1724,6 +1751,37 @@ function renderWatchList() {
         <td><div class="watch-actions">${snLink}<button class="watch-action-btn del" onclick="removeWatch('${w.ticker}')">✕</button></div></td>
       </tr>`;
     }).join('')}</tbody></table>`;
+}
+
+// ===== 銘柄名インライン編集 =====
+function startEditName(ticker, el) {
+  const w = watchList.find(x => x.ticker === ticker);
+  if (!w) return;
+  const current = w.name || ticker;
+  el.outerHTML = `<input class="watch-name-input" id="nameEdit_${ticker}"
+    value="${current}"
+    onblur="saveWatchName('${ticker}', this.value)"
+    onkeydown="if(event.key==='Enter')this.blur(); if(event.key==='Escape'){this.value='${current}';this.blur();}"
+    onclick="event.stopPropagation()">`;
+  const input = document.getElementById(`nameEdit_${ticker}`);
+  if (input) { input.focus(); input.select(); }
+}
+
+async function saveWatchName(ticker, newName) {
+  const name = newName.trim();
+  if (!name) { renderWatchList(); return; }
+  const w = watchList.find(x => x.ticker === ticker);
+  if (!w || w.name === name) { renderWatchList(); return; }
+  w.name = name;
+  if (CFG.sbUrl && CFG.sbKey && w.id) {
+    await sbFetch(`watchlist?id=eq.${w.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name })
+    });
+  } else {
+    saveWatchData();
+  }
+  renderWatchList();
 }
 
 // ===== メモ価格保存 =====
