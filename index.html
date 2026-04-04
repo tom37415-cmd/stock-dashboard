@@ -1633,9 +1633,9 @@ async function fetchAllWatchPrices() {
       // 銘柄名更新：日本株は常に株探から日本語名を取得し直す
       if (sym.endsWith('.T')) {
         const jpName = await resolveJapaneseName(w.ticker);
-        if (jpName && jpName !== w.name) {
+        if (jpName) {
           w.name = jpName;
-          // Supabaseのレコードも更新
+          // Supabaseのレコードも更新（ローマ字→日本語への上書きを含む）
           if (CFG.sbUrl && CFG.sbKey && w.id) {
             sbFetch(`watchlist?id=eq.${w.id}`, { method:'PATCH', body:JSON.stringify({ name: jpName }) });
           }
@@ -1673,27 +1673,24 @@ async function fetchAllWatchPrices() {
 // ===== PER取得 =====
 async function fetchPER(ticker, sym) {
   try {
-    // ① 現在PER：Yahoo Finance quoteSummary の trailingPE
-    const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${sym}?modules=summaryDetail,defaultKeyStatistics,earnings`;
-    const proxyUrl = PROXY + encodeURIComponent(url);
-    const res  = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) });
-    const text = await res.text();
-    const json = JSON.parse(text);
-    const sd   = json?.quoteSummary?.result?.[0]?.summaryDetail;
-    const ks   = json?.quoteSummary?.result?.[0]?.defaultKeyStatistics;
+    // v8/chart の meta に含まれる trailingPE を使用（既存プロキシで動作確認済み）
+    // 1年分の週次データを取得して平均PERも計算
+    const data = await fetchYahooChart(sym, '1y');
+    const result = data?.chart?.result?.[0];
+    if (!result) return;
 
-    const trailingPE = sd?.trailingPE?.raw ?? ks?.trailingPE?.raw ?? null;
+    const meta   = result.meta;
+    const closes = result.indicators?.quote?.[0]?.close || [];
+
+    // 現在PER
+    const trailingPE = meta.trailingPE ?? null;
     if (trailingPE == null) return;
 
-    // ② 1年平均PER：過去1年の週次終値 ÷ EPS (trailingEps) の平均
-    const eps = ks?.trailingEps?.raw ?? null;
+    // 1年平均PER：EPS = 現在株価 ÷ 現在PER → 過去1年の平均株価 ÷ EPS
+    const currentPrice = meta.regularMarketPrice || meta.chartPreviousClose;
+    const eps = currentPrice / trailingPE;
     let perAvg = null;
-    if (eps && eps > 0) {
-      const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1wk&range=1y`;
-      const cRes  = await fetch(PROXY + encodeURIComponent(chartUrl), { signal: AbortSignal.timeout(10000) });
-      const cText = await cRes.text();
-      const cJson = JSON.parse(cText);
-      const closes = cJson?.chart?.result?.[0]?.indicators?.quote?.[0]?.close || [];
+    if (eps > 0) {
       const validCloses = closes.filter(c => c != null && c > 0);
       if (validCloses.length > 0) {
         const avgPrice = validCloses.reduce((s, c) => s + c, 0) / validCloses.length;
@@ -1701,7 +1698,6 @@ async function fetchPER(ticker, sym) {
       }
     }
 
-    // watchPricesに反映して再描画
     if (watchPrices[ticker]) {
       watchPrices[ticker].per    = trailingPE;
       watchPrices[ticker].perAvg = perAvg;
