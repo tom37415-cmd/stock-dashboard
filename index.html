@@ -113,10 +113,10 @@
   .watch-input { flex: 1; padding: 7px 12px; border-radius: 8px; border: 1.5px solid var(--border); font-size: 0.85rem; font-family: inherit; color: var(--text); outline: none; background: var(--surface); transition: border-color .15s; }
   .watch-input:focus { border-color: var(--accent); }
   .watch-add-btn { padding: 7px 16px; border-radius: 8px; border: none; background: var(--accent); color: white; font-size: 0.83rem; font-weight: 600; cursor: pointer; font-family: inherit; white-space: nowrap; }
-  .watch-table { width: 100%; border-collapse: collapse; }
-  .watch-table th { padding: 8px 20px; font-size: 0.7rem; font-weight: 600; color: var(--text-sub); text-align: left; border-bottom: 1px solid var(--border); background: var(--surface2); letter-spacing: .06em; }
+  .watch-table { width: 100%; border-collapse: collapse; min-width: 600px; }
+  .watch-table th { padding: 8px 14px; font-size: 0.7rem; font-weight: 600; color: var(--text-sub); text-align: left; border-bottom: 1px solid var(--border); background: var(--surface2); letter-spacing: .06em; white-space: nowrap; }
   .watch-table th:not(:first-child) { text-align: right; }
-  .watch-table td { padding: 10px 20px; font-size: 0.84rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .watch-table td { padding: 10px 14px; font-size: 0.84rem; border-bottom: 1px solid var(--border); vertical-align: middle; white-space: nowrap; }
   .watch-table td:not(:first-child) { text-align: right; font-family: 'DM Mono', monospace; }
   .watch-table tr:last-child td { border-bottom: none; }
   .watch-table tr:hover td { background: var(--surface2); }
@@ -538,7 +538,7 @@ if (sessionStorage.getItem('unlocked') === '1') {
       <select id="watchGroupSelect" style="padding:7px 10px;border-radius:8px;border:1.5px solid var(--border);font-size:0.83rem;font-family:inherit;background:var(--surface);color:var(--text);outline:none;"></select>
       <button class="watch-add-btn" onclick="addWatch()">＋ 追加</button>
     </div>
-    <div id="watchListWrap">
+    <div id="watchListWrap" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
       <div class="loading-box">読込中...</div>
     </div>
   </div>
@@ -1523,13 +1523,10 @@ async function addWatch() {
   let name   = ticker;
   try {
     if (isJP) {
+      // 日本株：日本語名のみ採用。取れなければticker名のまま（fetchAllWatchPricesで後から更新）
       const jpName = await resolveJapaneseName(val);
       if (jpName) name = jpName;
-      else {
-        const data = await fetchYahooChart(sym, '1d');
-        const meta = data?.chart?.result?.[0]?.meta;
-        if (meta) name = meta.shortName || meta.longName || name;
-      }
+      // ★ Yahoo Financeの英語名へのフォールバックは行わない
     } else {
       // 米国株・ETF等：shortName → longName の順で取得
       const data = await fetchYahooChart(sym, '1d');
@@ -1670,33 +1667,40 @@ async function fetchAllWatchPrices() {
   renderWatchList();
 }
 
-// ===== PER取得 =====
+// ===== PER取得（株探から） =====
 async function fetchPER(ticker, sym) {
   try {
-    // v8/chart の meta に含まれる trailingPE を使用（既存プロキシで動作確認済み）
-    // 1年分の週次データを取得して平均PERも計算
-    const data = await fetchYahooChart(sym, '1y');
-    const result = data?.chart?.result?.[0];
-    if (!result) return;
+    const code = ticker.replace('.T','');
+    // 株探の株価指標ページからPERを取得
+    const url = `https://kabutan.jp/stock/finance/?code=${code}`;
+    const proxyUrl = PROXY + encodeURIComponent(url);
+    const res  = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) });
+    const html = await res.text();
+    if (!html || html.length < 200) return;
 
-    const meta   = result.meta;
-    const closes = result.indicators?.quote?.[0]?.close || [];
+    // 現在PER：「株価指標」テーブルの PER(倍) を抽出
+    // 例: <td class="...">PER(倍)</td><td>12.34</td>
+    const perM = html.match(/PER[^<]*<\/t[dh]>\s*<td[^>]*>\s*([\d.]+)\s*<\/td>/i)
+              || html.match(/(?:>|\s)PER(?:\(倍\))?[\s\S]{0,80}?<td[^>]*>\s*([\d.,]+)\s*<\/td>/i);
+    if (!perM) return;
+    const trailingPE = parseFloat(perM[1].replace(',',''));
+    if (isNaN(trailingPE) || trailingPE <= 0) return;
 
-    // 現在PER
-    const trailingPE = meta.trailingPE ?? null;
-    if (trailingPE == null) return;
-
-    // 1年平均PER：EPS = 現在株価 ÷ 現在PER → 過去1年の平均株価 ÷ EPS
-    const currentPrice = meta.regularMarketPrice || meta.chartPreviousClose;
-    const eps = currentPrice / trailingPE;
+    // 1年平均PER：過去1年の株価チャートから平均株価を算出し、EPSで割る
     let perAvg = null;
-    if (eps > 0) {
-      const validCloses = closes.filter(c => c != null && c > 0);
-      if (validCloses.length > 0) {
-        const avgPrice = validCloses.reduce((s, c) => s + c, 0) / validCloses.length;
-        perAvg = avgPrice / eps;
+    try {
+      const chartData = await fetchYahooChart(sym, '1y');
+      const closes = chartData?.chart?.result?.[0]?.indicators?.quote?.[0]?.close || [];
+      const currentPrice = watchPrices[ticker]?.rawPrice;
+      if (currentPrice && trailingPE > 0) {
+        const eps = currentPrice / trailingPE;
+        const validCloses = closes.filter(c => c != null && c > 0);
+        if (validCloses.length > 0 && eps > 0) {
+          const avgPrice = validCloses.reduce((s,c) => s+c, 0) / validCloses.length;
+          perAvg = avgPrice / eps;
+        }
       }
-    }
+    } catch {}
 
     if (watchPrices[ticker]) {
       watchPrices[ticker].per    = trailingPE;
