@@ -708,6 +708,19 @@ if (sessionStorage.getItem('unlocked') === '1') {
     <hr class="modal-divider">
 
     <div class="modal-section">
+      <div class="modal-label">📊 銘柄名DB（日本株の日本語名）</div>
+      <div class="modal-hint">
+        JPXの上場銘柄一覧Excelをアップロードすると全銘柄を日本語名で表示できます。<br>
+        <a href="https://www.jpx.co.jp/markets/statistics-equities/misc/01.html" target="_blank" style="color:var(--accent);">JPXサイト</a> から「上場銘柄一覧」をダウンロードしてください。月1回更新推奨。
+      </div>
+      <button onclick="uploadTickerDB();closeSettings();" style="width:100%;padding:9px;border-radius:8px;border:1px solid var(--accent);background:var(--surface);color:var(--accent);font-size:.85rem;font-weight:600;cursor:pointer;font-family:inherit;">
+        📂 Excelファイルをアップロード
+      </button>
+    </div>
+
+    <hr class="modal-divider">
+
+    <div class="modal-section">
       <div class="modal-label">🔐 パスワード変更</div>
       <div class="modal-hint">ダッシュボードのロック画面で使うパスワードを変更できます。<br>空欄のままにするとデフォルト（stock2024）になります。</div>
       <input class="modal-input" id="cfgPassword" type="password" placeholder="新しいパスワード（空欄 = stock2024）">
@@ -1364,34 +1377,118 @@ async function fetchYahooChart(sym, range='5d') {
   } catch { return null; }
 }
 
-// 日本株の日本語銘柄名を取得
+// ===== 銘柄名DB（JPX公式データ） =====
+let TICKER_NAMES = {
+  // フォールバック主要銘柄
+  '7203':'トヨタ自動車','9984':'ソフトバンクグループ','6758':'ソニーグループ',
+  '9983':'ファーストリテイリング','8035':'東京エレクトロン','6861':'キーエンス',
+  '8306':'三菱UFJフィナンシャル・グループ','8316':'三井住友フィナンシャルグループ',
+  '6920':'レーザーテック','7974':'任天堂','4063':'信越化学工業',
+  '9432':'日本電信電話','9433':'KDDI','9434':'ソフトバンク',
+  '6367':'ダイキン工業','4661':'オリエンタルランド','8058':'三菱商事',
+  '7267':'本田技研工業','7751':'キヤノン','6954':'ファナック',
+  '2914':'日本たばこ産業','4502':'武田薬品工業','6981':'村田製作所',
+};
+
+async function loadTickerDB() {
+  try {
+    const cache = localStorage.getItem('dash_tickers_cache');
+    if (cache) {
+      const { data, ts } = JSON.parse(cache);
+      if (Date.now() - ts < 30 * 24 * 60 * 60 * 1000) {
+        TICKER_NAMES = { ...TICKER_NAMES, ...data };
+        return;
+      }
+    }
+  } catch {}
+  // Supabaseにキャッシュがあれば取得
+  if (CFG.sbUrl && CFG.sbKey) {
+    try {
+      const res = await sbFetch('memos?id=eq.dash_tickers');
+      if (res && res.length && res[0].data?.tickers) {
+        const { tickers, ts } = res[0].data;
+        TICKER_NAMES = { ...TICKER_NAMES, ...tickers };
+        localStorage.setItem('dash_tickers_cache', JSON.stringify({ data: tickers, ts }));
+      }
+    } catch {}
+  }
+}
+
+async function uploadTickerDB() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.xls,.xlsx';
+  input.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    // SheetJSを動的ロード
+    if (!window.XLSX) {
+      await new Promise((res, rej) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+        s.onload = res; s.onerror = rej;
+        document.head.appendChild(s);
+      });
+    }
+    const buf = await file.arrayBuffer();
+    const wb  = XLSX.read(buf, { type: 'array' });
+    const ws  = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+    const data = {};
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row[1] || !row[2]) continue;
+      const code = String(row[1]).padStart(4, '0');
+      data[code] = String(row[2]);
+    }
+    TICKER_NAMES = { ...TICKER_NAMES, ...data };
+    const ts = Date.now();
+    localStorage.setItem('dash_tickers_cache', JSON.stringify({ data, ts }));
+    // Supabaseにも保存
+    if (CFG.sbUrl && CFG.sbKey) {
+      const existing = await sbFetch('memos?id=eq.dash_tickers');
+      const payload = { id: 'dash_tickers', data: { tickers: data, ts }, ticker: null, body: 'ticker_db' };
+      if (existing && existing.length > 0) {
+        await sbFetch('memos?id=eq.dash_tickers', { method:'PATCH', body:JSON.stringify({ data: { tickers: data, ts } }) });
+      } else {
+        await sbFetch('memos', { method:'POST', body:JSON.stringify(payload) });
+      }
+    }
+    alert(`✅ 銘柄DB更新完了：${Object.keys(data).length.toLocaleString()}件`);
+    // 登録済み銘柄の名前を更新
+    watchList.forEach(w => {
+      if (isJPCode(w.ticker) && data[w.ticker]) {
+        w.name = data[w.ticker];
+        if (CFG.sbUrl && CFG.sbKey && w.id) {
+          sbFetch(`watchlist?id=eq.${w.id}`, { method:'PATCH', body:JSON.stringify({ name: data[w.ticker] }) });
+        }
+      }
+    });
+    renderWatchList();
+  };
+  input.click();
+}
+
+// 日本株の日本語銘柄名を取得（DBから即時 → RSSフォールバック）
 async function resolveJapaneseName(code) {
-  // Yahoo Finance Japan のニュースRSSから銘柄名を取得
+  const c = code.toUpperCase();
+  // ① DBから即時取得
+  if (TICKER_NAMES[c]) return TICKER_NAMES[c];
+
+  // ② Yahoo Finance Japan RSSから取得
   try {
     const rssUrl = `https://finance.yahoo.co.jp/rss/news?code=${code}`;
     const proxyUrl = PROXY + encodeURIComponent(rssUrl);
     const res  = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
     const text = await res.text();
-    // <title>銘柄名 - Yahoo!ファイナンス</title> または channel title から抽出
     const m = text.match(/<title><!\[CDATA\[([^\]]+?)(?:\s*-\s*Yahoo|のニュース|\s*\(|\s*【)/)
            || text.match(/<title>([^<]+?)(?:\s*-\s*Yahoo|のニュース|\s*\(|\s*【)/);
     if (m && m[1]) {
       const name = m[1].trim();
-      if (name && /[\u3040-\u9fff]/.test(name) && name.length < 40) return name;
-    }
-  } catch {}
-
-  // フォールバック：Google News RSSの最初のアイテムタイトルから銘柄名を推測
-  try {
-    const rssUrl = `https://news.google.com/rss/search?q=${code}+株&hl=ja&gl=JP&ceid=JP:ja`;
-    const proxyUrl = PROXY + encodeURIComponent(rssUrl);
-    const res  = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
-    const text = await res.text();
-    // チャンネルタイトルから銘柄名を取得
-    const m = text.match(/<channel>[\s\S]*?<title><!\[CDATA\[([^\]]+)\]\]>/);
-    if (m && m[1]) {
-      const name = m[1].replace(/\s*-\s*Google.*$/,'').trim();
-      if (name && /[\u3040-\u9fff]/.test(name) && name.length < 40) return name;
+      if (name && /[\u3040-\u9fff]/.test(name) && name.length < 40) {
+        TICKER_NAMES[c] = name; // キャッシュ
+        return name;
+      }
     }
   } catch {}
 
@@ -2254,12 +2351,12 @@ document.addEventListener('keydown', e=>{
 // INIT
 // ============================================================
 async function initSupabase() {
+  await loadTickerDB();
   await loadWatchList();
   await loadMemos();
   await loadSnMemos();
   await loadYtLinks();
   await loadSiteLinks();
-  // ウォッチリスト銘柄のニュースチェック（少し遅延させて他の読込を優先）
   setTimeout(fetchWatchNews, 4000);
 }
 
