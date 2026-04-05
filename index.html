@@ -1549,15 +1549,52 @@ function renderWatchGroupList() {
     el.innerHTML = '<div style="font-size:.82rem;color:var(--text-sub);padding:4px 0;">グループがまだありません</div>';
     return;
   }
-  el.innerHTML = '<div style="font-size:.72rem;color:var(--text-sub);margin-bottom:8px;font-weight:600;">現在のグループ</div>' +
-    userGroups.map(g => `
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--surface2);border-radius:8px;margin-bottom:6px;">
-        <span style="font-size:.85rem;font-weight:500;">${g.name}</span>
+  el.innerHTML = '<div style="font-size:.72rem;color:var(--text-sub);margin-bottom:8px;font-weight:600;">現在のグループ（↑↓で順序変更）</div>' +
+    userGroups.map((g, i) => `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--surface2);border-radius:8px;margin-bottom:6px;gap:8px;">
+        <div style="display:flex;flex-direction:column;gap:2px;">
+          <button onclick="moveWatchGroup(${i},-1)" ${i===0?'disabled':''} style="padding:0 6px;border-radius:4px;border:1px solid var(--border);background:none;font-size:.7rem;cursor:pointer;line-height:1.6;${i===0?'opacity:.3':''}">▲</button>
+          <button onclick="moveWatchGroup(${i},1)" ${i===userGroups.length-1?'disabled':''} style="padding:0 6px;border-radius:4px;border:1px solid var(--border);background:none;font-size:.7rem;cursor:pointer;line-height:1.6;${i===userGroups.length-1?'opacity:.3':''}">▼</button>
+        </div>
+        <span style="font-size:.85rem;font-weight:500;flex:1;">${g.name}</span>
         <div style="display:flex;align-items:center;gap:8px;">
           <span style="font-size:.72rem;color:var(--text-sub);">${watchList.filter(w=>w.groupId===g.id).length}銘柄</span>
           <button onclick="deleteWatchGroup('${g.id}')" style="padding:2px 8px;border-radius:5px;border:1px solid var(--border);background:none;color:var(--red);font-size:.72rem;cursor:pointer;">削除</button>
         </div>
       </div>`).join('');
+}
+
+async function moveWatchGroup(index, direction) {
+  const userGroups = watchGroups.filter(g => g.id !== 'all');
+  const newIndex = index + direction;
+  if (newIndex < 0 || newIndex >= userGroups.length) return;
+
+  // watchGroups配列内のallを除いた位置で入れ替え
+  const allIdx  = watchGroups.findIndex(g => g.id === 'all');
+  const grpsCopy = watchGroups.filter(g => g.id !== 'all');
+  [grpsCopy[index], grpsCopy[newIndex]] = [grpsCopy[newIndex], grpsCopy[index]];
+
+  // sort_orderを更新
+  grpsCopy.forEach((g, i) => { g.sort_order = i; });
+  watchGroups = allIdx === 0
+    ? [watchGroups[0], ...grpsCopy]
+    : [...grpsCopy];
+  // allが先頭に来るよう保持
+  if (!watchGroups.find(g => g.id === 'all')) watchGroups.unshift({ id:'all', name:'すべて' });
+
+  // Supabaseに順序を保存
+  if (CFG.sbUrl && CFG.sbKey) {
+    for (const g of grpsCopy) {
+      if (g.id && !String(g.id).startsWith('g_')) {
+        sbFetch(`watch_groups?id=eq.${g.id}`, { method:'PATCH', body:JSON.stringify({ sort_order: g.sort_order }) });
+      }
+    }
+  } else {
+    saveWatchData();
+  }
+
+  renderWatchGroups();
+  renderWatchGroupList();
 }
 async function addWatchGroup() {
   const name = document.getElementById('watchGroupNameInput').value.trim();
@@ -1764,26 +1801,22 @@ async function fetchAllWatchPrices() {
   renderWatchList();
 }
 
-// ===== PER取得（株探から） =====
+// ===== PER取得 =====
 async function fetchPER(ticker, sym) {
   try {
-    const code = ticker.replace('.T','');
-    // 株探の株価指標ページからPERを取得
-    const url = `https://kabutan.jp/stock/finance/?code=${code}`;
-    const proxyUrl = PROXY + encodeURIComponent(url);
-    const res  = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) });
-    const html = await res.text();
-    if (!html || html.length < 200) return;
+    // allorigins経由でYahoo Finance quoteSummary取得（CORS回避）
+    const yfUrl = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${sym}?modules=summaryDetail,defaultKeyStatistics`;
+    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(yfUrl)}`;
+    const res  = await fetch(proxyUrl, { signal: AbortSignal.timeout(12000) });
+    const json = await res.json();
+    const data = JSON.parse(json.contents || '{}');
+    const sd   = data?.quoteSummary?.result?.[0]?.summaryDetail;
+    const ks   = data?.quoteSummary?.result?.[0]?.defaultKeyStatistics;
 
-    // 現在PER：「株価指標」テーブルの PER(倍) を抽出
-    // 例: <td class="...">PER(倍)</td><td>12.34</td>
-    const perM = html.match(/PER[^<]*<\/t[dh]>\s*<td[^>]*>\s*([\d.]+)\s*<\/td>/i)
-              || html.match(/(?:>|\s)PER(?:\(倍\))?[\s\S]{0,80}?<td[^>]*>\s*([\d.,]+)\s*<\/td>/i);
-    if (!perM) return;
-    const trailingPE = parseFloat(perM[1].replace(',',''));
-    if (isNaN(trailingPE) || trailingPE <= 0) return;
+    const trailingPE = sd?.trailingPE?.raw ?? ks?.trailingPE?.raw ?? null;
+    if (trailingPE == null || trailingPE <= 0) return;
 
-    // 1年平均PER：過去1年の株価チャートから平均株価を算出し、EPSで割る
+    // 1年平均PER：現在PERからEPS算出 → 過去1年平均株価 ÷ EPS
     let perAvg = null;
     try {
       const chartData = await fetchYahooChart(sym, '1y');
