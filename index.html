@@ -560,21 +560,6 @@ if (sessionStorage.getItem('unlocked') === '1') {
   <!-- SIDEBAR -->
   <div class="sidebar">
 
-    <!-- STOCKNOTE PANEL -->
-    <div class="card sn-panel">
-      <div class="card-header">
-        <div class="card-title"><div class="card-title-icon icon-purple">🗒</div>StockNote</div>
-        <a class="sn-header-btn" id="snOpenBtn" href="#" target="_blank">開く →</a>
-      </div>
-      <div class="sn-search-bar">
-        <input class="sn-search-input" id="snSearchInput" placeholder="銘柄コードで検索" onkeydown="if(event.key==='Enter')snSearch()">
-        <button class="sn-search-btn" onclick="snSearch()">検索</button>
-      </div>
-      <div class="sn-memo-list" id="snMemoList">
-        <div class="sn-no-config">⚙ 設定からSupabaseのURL・APIキーと<br>StockNoteのURLを入力してください</div>
-      </div>
-    </div>
-
     <!-- 話題株ダイジェスト -->
     <div class="card">
       <div class="card-header">
@@ -595,16 +580,6 @@ if (sessionStorage.getItem('unlocked') === '1') {
       <div id="materialWrap" style="padding:12px 18px;">
         <div class="loading-box"><div class="spinner"></div>取得中...</div>
       </div>
-    </div>
-
-    <!-- YOUTUBE -->
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title"><div class="card-title-icon icon-amber">▶️</div>YouTubeリンク集</div>
-        <span class="card-badge badge-amber" id="ytCount">0本</span>
-      </div>
-      <div class="yt-list" id="ytList"></div>
-      <button class="add-dashed-btn" onclick="openYtModal()">＋ 動画を追加</button>
     </div>
 
     <!-- LINKS -->
@@ -691,16 +666,8 @@ if (sessionStorage.getItem('unlocked') === '1') {
     <div class="modal-title">⚙ 設定</div>
 
     <div class="modal-section">
-      <div class="modal-label">🗒 STOCKNOTE URL</div>
-      <div class="modal-hint">StockNote（stock-dashboard）のNetlifyのURLを入力してください。<br>例: https://your-stocknote.netlify.app</div>
-      <input class="modal-input" id="cfgSnUrl" placeholder="https://your-stocknote.netlify.app">
-    </div>
-
-    <hr class="modal-divider">
-
-    <div class="modal-section">
-      <div class="modal-label">🗄 SUPABASE 設定（ウォッチリスト・メモ・StockNote連携）</div>
-      <div class="modal-hint">StockNoteと同じSupabaseプロジェクトのURL・APIキーを入力してください。<br>必要なテーブル: <b>watchlist</b>（ticker, name, added_at）、<b>memos</b>（ticker, body, created_at）</div>
+      <div class="modal-label">🗄 SUPABASE 設定</div>
+      <div class="modal-hint">SupabaseプロジェクトのURL・APIキーを入力してください。<br>必要なテーブル: <b>watchlist</b>、<b>memos</b>、<b>watch_groups</b>、<b>site_links</b></div>
       <input class="modal-input purple" id="cfgSbUrl" placeholder="https://xxxx.supabase.co">
       <input class="modal-input purple" id="cfgSbKey" placeholder="eyJhbGci... (anon key)">
     </div>
@@ -729,23 +696,6 @@ if (sessionStorage.getItem('unlocked') === '1') {
     <div class="modal-btns">
       <button class="btn-cancel" onclick="closeSettings()">キャンセル</button>
       <button class="btn-primary btn-purple" onclick="saveSettings()">保存して反映</button>
-    </div>
-  </div>
-</div>
-
-<!-- YT MODAL -->
-<div class="modal-overlay" id="ytModal" onclick="if(event.target===this)closeYtModal()">
-  <div class="modal">
-    <div class="modal-title">▶ YouTube動画を追加</div>
-    <div class="modal-label">YouTube URL</div>
-    <input class="modal-input" id="ytUrl" placeholder="https://www.youtube.com/watch?v=...">
-    <div class="modal-label">タイトル</div>
-    <input class="modal-input" id="ytTitle" placeholder="動画タイトル">
-    <div class="modal-label">チャンネル名</div>
-    <input class="modal-input" id="ytChannel" placeholder="チャンネル名">
-    <div class="modal-btns">
-      <button class="btn-cancel" onclick="closeYtModal()">キャンセル</button>
-      <button class="btn-primary" onclick="addYtLink()">追加</button>
     </div>
   </div>
 </div>
@@ -790,21 +740,17 @@ if (sessionStorage.getItem('unlocked') === '1') {
 let CFG = {};
 function loadCfg() {
   try { CFG = JSON.parse(localStorage.getItem('dash_cfg') || '{}'); } catch { CFG = {}; }
-  if (CFG.snUrl) document.getElementById('snOpenBtn').href = CFG.snUrl;
 }
 function saveSettings() {
-  CFG.snUrl = document.getElementById('cfgSnUrl').value.trim().replace(/\/$/, '');
   CFG.sbUrl = document.getElementById('cfgSbUrl').value.trim().replace(/\/$/, '');
   CFG.sbKey = document.getElementById('cfgSbKey').value.trim();
   if (document.getElementById('cfgPassword').value.trim())
     CFG.password = document.getElementById('cfgPassword').value.trim();
   localStorage.setItem('dash_cfg', JSON.stringify(CFG));
-  if (CFG.snUrl) document.getElementById('snOpenBtn').href = CFG.snUrl;
   closeSettings();
   initSupabase();
 }
 function openSettings() {
-  document.getElementById('cfgSnUrl').value    = CFG.snUrl    || '';
   document.getElementById('cfgSbUrl').value    = CFG.sbUrl    || '';
   document.getElementById('cfgSbKey').value    = CFG.sbKey    || '';
   document.getElementById('cfgPassword').value = '';
@@ -1844,7 +1790,6 @@ async function fetchPER(ticker, sym) {
 function renderWatchList() {
   document.getElementById('watchCount').textContent = watchList.length + '銘柄';
   const el    = document.getElementById('watchListWrap');
-  const snUrl = CFG.snUrl || '';
   const list  = currentWatchGroup === 'all'
     ? watchList
     : watchList.filter(w => w.groupId === currentWatchGroup);
@@ -1870,7 +1815,12 @@ function renderWatchList() {
     </tr></thead>
     <tbody>${list.map(w => {
       const p = watchPrices[w.ticker];
-      const snLink = snUrl ? `<a class="watch-action-btn watch-sn-btn" href="${snUrl}?q=${w.ticker}" target="_blank">SN</a>` : '';
+      // 日本株のみ株探・四季報リンクを表示
+      const jpCode = isJPCode(w.ticker) ? w.ticker : null;
+      const extLinks = jpCode ? `
+        <a class="watch-action-btn" href="https://kabutan.jp/stock/?code=${jpCode}" target="_blank" title="株探" style="background:#fff9e6;border-color:#f0c040;color:#c27c00;">株探</a>
+        <a class="watch-action-btn" href="https://shikiho.toyokeizai.net/stocks/${jpCode}" target="_blank" title="四季報" style="background:#e8f5e9;border-color:#81c784;color:#2e7d32;">四季報</a>
+      ` : '';
 
       // ニュースバッジ — 取得済みなら常に表示
       const news = watchNews[w.ticker];
@@ -1926,7 +1876,7 @@ function renderWatchList() {
             onclick="event.stopPropagation()">
         </td>
         <td>${memoPctHtml}</td>
-        <td><div class="watch-actions">${snLink}<button class="watch-action-btn del" onclick="removeWatch('${w.ticker}')">✕</button></div></td>
+        <td><div class="watch-actions">${extLinks}<button class="watch-action-btn del" onclick="removeWatch('${w.ticker}')">✕</button></div></td>
       </tr>`;
     }).join('')}</tbody></table>`;
 }
@@ -2376,7 +2326,7 @@ async function addLinkItem() {
 // ============================================================
 document.addEventListener('keydown', e=>{
   if(e.key==='Escape') {
-    ['settingsModal','ytModal','linkModal','watchGroupModal','predictModal'].forEach(id=>document.getElementById(id).classList.remove('open'));
+    ['settingsModal','linkModal','watchGroupModal','predictModal'].forEach(id=>document.getElementById(id).classList.remove('open'));
   }
 });
 
@@ -2387,8 +2337,6 @@ async function initSupabase() {
   await loadTickerDB();
   await loadWatchList();
   await loadMemos();
-  await loadSnMemos();
-  await loadYtLinks();
   await loadSiteLinks();
   setTimeout(fetchWatchNews, 4000);
 }
