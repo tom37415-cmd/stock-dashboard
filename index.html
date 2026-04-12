@@ -43,18 +43,13 @@
   .settings-btn:hover { border-color: var(--accent); color: var(--accent); }
 
   /* ===== TICKER ===== */
-  .ticker-strip { grid-column: 1/-1; background: var(--surface); border-radius: var(--radius); padding: 0 20px; height: 52px; display: flex; align-items: center; overflow: hidden; border: 1px solid var(--border); box-shadow: var(--shadow); }
-  .ticker-label { font-size: 0.68rem; font-weight: 700; color: var(--text-sub); letter-spacing: .12em; white-space: nowrap; margin-right: 16px; flex-shrink: 0; }
-  .ticker-scroll-wrap { overflow: hidden; flex: 1; }
-  .ticker-scroll { display: flex; gap: 32px; animation: tickerMove 50s linear infinite; white-space: nowrap; }
+  /* ===== TOP NAV ===== */
+  .top-nav { grid-column: 1/-1; background: var(--surface); border-radius: var(--radius); padding: 0 20px; height: 48px; display: flex; align-items: center; gap: 6px; border: 1px solid var(--border); box-shadow: var(--shadow); overflow-x: auto; scrollbar-width: none; flex-wrap: nowrap; }
+  .top-nav::-webkit-scrollbar { display: none; }
+  .top-nav-item { display: flex; align-items: center; gap: 5px; padding: 5px 12px; border-radius: 20px; font-size: 0.78rem; font-weight: 600; color: var(--text-sub); cursor: pointer; white-space: nowrap; border: 1px solid transparent; text-decoration: none; transition: all .15s; flex-shrink: 0; }
+  .top-nav-item:hover { background: var(--surface2); border-color: var(--border); color: var(--text); }
+  .top-nav-divider { width: 1px; height: 20px; background: var(--border); flex-shrink: 0; margin: 0 4px; }
   @keyframes tickerMove { 0%{transform:translateX(0)}100%{transform:translateX(-50%)} }
-  .ticker-item { display: flex; align-items: center; gap: 8px; font-family: 'DM Mono', monospace; font-size: 0.83rem; }
-  .ticker-name { color: var(--text-sub); font-size: 0.75rem; }
-  .ticker-price { color: var(--text); font-weight: 500; }
-  .ticker-change.up { color: var(--accent2); }
-  .ticker-change.down { color: var(--red); }
-  .ticker-sep { color: var(--border); }
-  .ticker-update { font-size: 0.68rem; color: var(--text-sub); flex-shrink: 0; margin-left: 12px; white-space: nowrap; }
 
   /* ===== LAYOUT ===== */
   .main-wrap { max-width: 1440px; margin: 0 auto; padding: 20px 18px; display: grid; grid-template-columns: 1fr 340px; gap: 18px; }
@@ -272,8 +267,32 @@
   @media (max-width: 960px) {
     .main-wrap { grid-template-columns: 1fr; }
     .sidebar { grid-column: 1; grid-row: auto; }
-    .ticker-strip { grid-column: 1; }
+    .top-nav { grid-column: 1; }
   }
+
+  /* ===== ウォッチリスト スマホ対応（列絞り込み） ===== */
+  /* スマホでは メモ価格・メモ比・PER・決算日 列を非表示 */
+  @media (max-width: 768px) {
+    .watch-col-memo, .watch-col-memopct, .watch-col-per, .watch-col-earnings { display: none; }
+    .watch-table th, .watch-table td { padding: 8px 8px; }
+    .watch-table { min-width: unset; }
+  }
+
+  /* ===== 決算日 ===== */
+  .earnings-date-input {
+    width: 110px; padding: 3px 6px; border-radius: 5px;
+    border: 1px solid var(--border); font-size: .75rem;
+    font-family: inherit; background: var(--surface); color: var(--text);
+    outline: none; transition: border-color .15s;
+  }
+  .earnings-date-input:focus { border-color: var(--purple); }
+  .earnings-badge {
+    display: inline-block; padding: 1px 6px; border-radius: 4px;
+    font-size: .68rem; font-weight: 600; background: #eff6ff;
+    color: #2563eb; border: 1px solid #bfdbfe; white-space: nowrap;
+  }
+  .earnings-badge.soon { background: #fff7ed; color: #c2410c; border-color: #fdba74; }
+  .earnings-badge.today { background: #fef2f2; color: #dc2626; border-color: #fca5a5; animation: pulse 1.5s infinite; }
 
   /* ===== PREDICTION BUTTON ===== */
   .predict-btn {
@@ -469,17 +488,22 @@ if (sessionStorage.getItem('unlocked') === '1') {
 
 <div class="main-wrap">
 
-  <!-- TICKER -->
-  <div class="ticker-strip" style="grid-column:1/-1">
-    <span class="ticker-label">LIVE</span>
-    <div class="ticker-scroll-wrap">
-      <div class="ticker-scroll" id="tickerScroll"></div>
-    </div>
-    <span class="ticker-update" id="tickerUpdateTime">--</span>
-  </div>
+  <!-- TOP NAV -->
+  <nav class="top-nav" style="grid-column:1/-1">
+    <a class="top-nav-item" href="#news-section">📰 ニュース</a>
+    <a class="top-nav-item" href="#chart-section">📊 チャート</a>
+    <a class="top-nav-item" href="#watch-section">👁 ウォッチリスト</a>
+    <a class="top-nav-item" href="#memo-section">📝 投資メモ</a>
+    <div class="top-nav-divider"></div>
+    <a class="top-nav-item" href="#digest-section">🔥 話題株</a>
+    <a class="top-nav-item" href="#material-section">📋 好悪材料</a>
+    <a class="top-nav-item" href="#links-section">🔗 リンク集</a>
+    <div class="top-nav-divider"></div>
+    <a class="top-nav-item" href="#predict-section" onclick="openPredictModal();return false;">🔮 翌日予測</a>
+  </nav>
 
   <!-- NEWS -->
-  <div class="card news-section">
+  <div class="card news-section" id="news-section">
     <div class="card-header">
       <div class="card-title"><div class="card-title-icon icon-blue">📰</div>注目ニュース</div>
       <span class="card-badge badge-blue" id="newsCount">読込中</span>
@@ -498,7 +522,7 @@ if (sessionStorage.getItem('unlocked') === '1') {
   </div>
 
   <!-- CHART -->
-  <div class="card chart-section">
+  <div class="card chart-section" id="chart-section">
     <div class="card-header">
       <div class="card-title"><div class="card-title-icon icon-green">📊</div>株価チャート</div>
     </div>
@@ -524,7 +548,7 @@ if (sessionStorage.getItem('unlocked') === '1') {
   </div>
 
   <!-- WATCHLIST -->
-  <div class="card watchlist-section">
+  <div class="card watchlist-section" id="watch-section">
     <div class="card-header">
       <div class="card-title"><div class="card-title-icon icon-teal">👁</div>ウォッチリスト</div>
       <span class="card-badge badge-green" id="watchCount">0銘柄</span>
@@ -544,7 +568,7 @@ if (sessionStorage.getItem('unlocked') === '1') {
   </div>
 
   <!-- MEMO -->
-  <div class="card memo-section">
+  <div class="card memo-section" id="memo-section">
     <div class="card-header">
       <div class="card-title"><div class="card-title-icon icon-purple">📝</div>投資メモ</div>
       <span class="card-badge badge-purple" id="memoCount">0件</span>
@@ -561,7 +585,7 @@ if (sessionStorage.getItem('unlocked') === '1') {
   <div class="sidebar">
 
     <!-- 話題株ダイジェスト -->
-    <div class="card">
+    <div class="card" id="digest-section">
       <div class="card-header">
         <div class="card-title"><div class="card-title-icon icon-red">🔥</div>話題株ダイジェスト</div>
         <span class="card-badge badge-amber" id="digestBadge">確認中...</span>
@@ -572,7 +596,7 @@ if (sessionStorage.getItem('unlocked') === '1') {
     </div>
 
     <!-- 明日の好悪材料 -->
-    <div class="card">
+    <div class="card" id="material-section">
       <div class="card-header">
         <div class="card-title"><div class="card-title-icon icon-green">📋</div>明日の好悪材料</div>
         <span class="card-badge badge-green" id="materialBadge">確認中...</span>
@@ -777,21 +801,7 @@ setInterval(updateClock, 1000); updateClock();
 // ============================================================
 // TICKER (Yahoo Finance v8 via allorigins proxy)
 // ============================================================
-const TICKER_SYMBOLS = [
-  { sym: '%5EN225', name: '日経225', fmt: n => n.toLocaleString('ja-JP',{maximumFractionDigits:0}) },
-  { sym: '%5ETOPX', name: 'TOPIX', fmt: n => n.toLocaleString('ja-JP',{maximumFractionDigits:2}) },
-  { sym: '%5EGSPC', name: 'S&P500', fmt: n => n.toLocaleString('en-US',{maximumFractionDigits:2}) },
-  { sym: '%5EIXIC', name: 'NASDAQ', fmt: n => n.toLocaleString('en-US',{maximumFractionDigits:2}) },
-  { sym: 'USDJPY%3DX', name: 'ドル円', fmt: n => n.toFixed(2) },
-  { sym: 'EURJPY%3DX', name: 'ユーロ円', fmt: n => n.toFixed(2) },
-  { sym: 'CL%3DF', name: 'WTI原油', fmt: n => '$'+n.toFixed(2) },
-  { sym: 'GC%3DF', name: '金(GOLD)', fmt: n => '$'+n.toLocaleString('en-US',{maximumFractionDigits:0}) },
-  { sym: '%5EVIX', name: 'VIX', fmt: n => n.toFixed(2) },
-  { sym: 'BTC-USD', name: 'BTC/USD', fmt: n => '$'+n.toLocaleString('en-US',{maximumFractionDigits:0}) },
-];
-
-let tickerLive = [];
-
+// fetchOneTicker は翌日予測機能で使用
 async function fetchOneTicker(item) {
   const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${item.sym}?interval=1d&range=2d`)}`;
   try {
@@ -807,34 +817,6 @@ async function fetchOneTicker(item) {
     return { name: item.name, price: item.fmt(price), change: (pct>=0?'+':'')+pct.toFixed(2)+'%', up: pct>=0 };
   } catch { return null; }
 }
-
-async function fetchAllTickers() {
-  const results = await Promise.all(TICKER_SYMBOLS.map(fetchOneTicker));
-  tickerLive = results.filter(Boolean);
-  if (tickerLive.length > 0) renderTicker(tickerLive);
-  const now = new Date();
-  document.getElementById('tickerUpdateTime').textContent = `更新: ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`;
-  setTimeout(fetchAllTickers, 60000);
-}
-
-function renderTicker(data) {
-  const items = [...data, ...data].map(t => `
-    <div class="ticker-item">
-      <span class="ticker-name">${t.name}</span>
-      <span class="ticker-price">${t.price}</span>
-      <span class="ticker-change ${t.up?'up':'down'}">${t.change}</span>
-      <span class="ticker-sep">·</span>
-    </div>
-  `).join('');
-  document.getElementById('tickerScroll').innerHTML = items;
-}
-
-// Fallback static data while loading
-renderTicker([
-  {name:'日経225',price:'--',change:'取得中',up:true},{name:'TOPIX',price:'--',change:'取得中',up:true},
-  {name:'S&P500',price:'--',change:'取得中',up:true},{name:'ドル円',price:'--',change:'取得中',up:true},
-]);
-fetchAllTickers();
 
 // ============================================================
 // NEWS — Cloudflare Worker プロキシ経由（CORS完全回避）
@@ -1809,35 +1791,32 @@ function renderWatchList() {
       <th>現在値</th>
       <th>前日比</th>
       <th>1週間</th>
-      <th>メモ価格</th>
-      <th>メモ比</th>
+      <th class="watch-col-memo">メモ価格</th>
+      <th class="watch-col-memopct">メモ比</th>
+      <th class="watch-col-per">PER</th>
+      <th class="watch-col-earnings">決算予定日</th>
       <th></th>
     </tr></thead>
     <tbody>${list.map(w => {
       const p = watchPrices[w.ticker];
-      // 日本株のみ株探・四季報リンクを表示
       const jpCode = isJPCode(w.ticker) ? w.ticker : null;
       const extLinks = jpCode ? `
-        <a class="watch-action-btn" href="https://kabutan.jp/stock/?code=${jpCode}" target="_blank" title="株探" style="background:#fff9e6;border-color:#f0c040;color:#c27c00;">株探</a>
-        <a class="watch-action-btn" href="https://shikiho.toyokeizai.net/stocks/${jpCode}" target="_blank" title="四季報" style="background:#e8f5e9;border-color:#81c784;color:#2e7d32;">四季報</a>
+        <a class="watch-action-btn" href="https://kabutan.jp/stock/?code=${jpCode}" target="_blank" style="background:#fff9e6;border-color:#f0c040;color:#c27c00;">株探</a>
+        <a class="watch-action-btn" href="https://shikiho.toyokeizai.net/stocks/${jpCode}" target="_blank" style="background:#e8f5e9;border-color:#81c784;color:#2e7d32;">四季報</a>
       ` : '';
 
-      // ニュースバッジ — 取得済みなら常に表示
+      // ニュースバッジ
       const news = watchNews[w.ticker];
       let newsBadge = '';
       if (news === undefined) {
-        // まだ取得中 → 小さなインジケータ
         newsBadge = `<span style="font-size:.65rem;color:var(--text-sub);">📰</span>`;
       } else if (news === 'none' || (Array.isArray(news) && news.length === 0)) {
-        // 1ヶ月以内ニュースなし → グレーバッジ
-        newsBadge = `<span onclick="openNewsPopup('${w.ticker}',event)" title="直近1ヶ月のニュースなし"
-          style="font-size:.65rem;color:var(--text-sub);cursor:pointer;">📭</span>`;
+        newsBadge = `<span onclick="openNewsPopup('${w.ticker}',event)" style="font-size:.65rem;color:var(--text-sub);cursor:pointer;">📭</span>`;
       } else {
-        // ニュースあり → 赤バッジ（件数表示）
-        newsBadge = `<span class="watch-news-badge" onclick="openNewsPopup('${w.ticker}',event)" title="${news.length}件のニュース">📰${news.length}</span>`;
+        newsBadge = `<span class="watch-news-badge" onclick="openNewsPopup('${w.ticker}',event)">📰${news.length}</span>`;
       }
 
-      // メモ価格 vs 現在値 騰落率
+      // メモ価格比
       let memoPctHtml = '<span class="watch-memo-pct flat">--</span>';
       if (p && p.rawPrice && w.memo_price) {
         const mp = parseFloat(w.memo_price);
@@ -1848,19 +1827,25 @@ function renderWatchList() {
         }
       }
 
+      // 決算予定日バッジ
+      let earningsBadge = '';
+      if (w.earnings_date) {
+        const ed = new Date(w.earnings_date);
+        const today = new Date(); today.setHours(0,0,0,0);
+        const diff = Math.floor((ed - today) / 86400000);
+        if (diff === 0)       earningsBadge = `<span class="earnings-badge today">🔔 本日</span>`;
+        else if (diff <= 7)   earningsBadge = `<span class="earnings-badge soon">⚡ ${diff}日後</span>`;
+        else if (diff <= 30)  earningsBadge = `<span class="earnings-badge">${diff}日後</span>`;
+        else if (diff > 0)    earningsBadge = `<span class="earnings-badge" style="background:var(--surface2);color:var(--text-sub);border-color:var(--border);">${ed.toLocaleDateString('ja-JP',{month:'short',day:'numeric'})}</span>`;
+      }
+
       return `<tr>
         <td>
           <div style="display:flex;align-items:center;gap:6px;">
             <div>
-              <div class="watch-ticker-name"
-                title="クリックで銘柄名を編集"
-                onclick="startEditName('${w.ticker}', this)">
-                ${w.name||w.ticker}
-              </div>
+              <div class="watch-ticker-name" onclick="startEditName('${w.ticker}', this)">${w.name||w.ticker}</div>
               <div class="watch-ticker-code">${w.ticker}</div>
-              ${p && p.per != null ? `<div style="font-size:.68rem;color:var(--text-sub);margin-top:2px;font-family:'DM Mono',monospace;">
-                PER <span style="color:var(--text);font-weight:600;">${p.per.toFixed(1)}倍</span>${p.perAvg != null ? `<span style="color:var(--text-sub);"> / 平均 ${p.perAvg.toFixed(1)}倍</span>` : ''}
-              </div>` : ''}
+              ${p && p.per != null ? `<div class="watch-col-per" style="font-size:.68rem;color:var(--text-sub);margin-top:1px;font-family:'DM Mono',monospace;">PER <b>${p.per.toFixed(1)}</b>${p.perAvg!=null?` / 平均${p.perAvg.toFixed(1)}`:''}</div>` : ''}
             </div>
             ${newsBadge}
           </div>
@@ -1868,14 +1853,23 @@ function renderWatchList() {
         <td class="watch-price">${p ? p.price : '<span style="color:var(--text-sub);font-size:.78rem;">取得中</span>'}</td>
         <td><span class="watch-change ${p&&p.dayUp!=null?(p.dayUp?'up':'down'):''}">${p?p.dayPct:'--'}</span></td>
         <td><span class="watch-change ${p&&p.weekUp!=null?(p.weekUp?'up':'down'):''}">${p?p.weekPct:'--'}</span></td>
-        <td>
-          <input class="watch-memo-price-input" type="number"
-            placeholder="0"
+        <td class="watch-col-memo">
+          <input class="watch-memo-price-input" type="number" placeholder="0"
             value="${w.memo_price || ''}"
             onchange="saveMemoPrice('${w.ticker}', this.value)"
             onclick="event.stopPropagation()">
         </td>
-        <td>${memoPctHtml}</td>
+        <td class="watch-col-memopct">${memoPctHtml}</td>
+        <td class="watch-col-per" style="font-family:'DM Mono',monospace;font-size:.83rem;">${p&&p.per!=null ? p.per.toFixed(1)+'倍' : '--'}</td>
+        <td class="watch-col-earnings">
+          <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;">
+            ${earningsBadge}
+            <input class="earnings-date-input" type="date"
+              value="${w.earnings_date || ''}"
+              onchange="saveEarningsDate('${w.ticker}', this.value)"
+              onclick="event.stopPropagation()">
+          </div>
+        </td>
         <td><div class="watch-actions">${extLinks}<button class="watch-action-btn del" onclick="removeWatch('${w.ticker}')">✕</button></div></td>
       </tr>`;
     }).join('')}</tbody></table>`;
@@ -1929,7 +1923,21 @@ async function saveMemoPrice(ticker, value) {
   renderWatchList();
 }
 
-// ===== ニュースアラート =====
+// ===== 決算予定日保存 =====
+async function saveEarningsDate(ticker, value) {
+  const w = watchList.find(x => x.ticker === ticker);
+  if (!w) return;
+  w.earnings_date = value || null;
+  if (CFG.sbUrl && CFG.sbKey && w.id) {
+    await sbFetch(`watchlist?id=eq.${w.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ earnings_date: value || null })
+    });
+  } else {
+    saveWatchData();
+  }
+  renderWatchList();
+}
 let watchNews = {}; // { ticker: [{title, link, dt}] | 'none' }
 let watchNewsPopupEl = null;
 
