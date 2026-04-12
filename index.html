@@ -278,7 +278,26 @@
     .watch-table { min-width: unset; }
   }
 
-  /* ===== 決算日 ===== */
+  /* ===== グループ移動ポップアップ ===== */
+  .move-popup {
+    position: fixed; z-index: 300;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; box-shadow: var(--shadow-hover);
+    min-width: 160px; overflow: hidden;
+  }
+  .move-popup-header {
+    padding: 8px 12px; font-size: .75rem; font-weight: 700;
+    color: var(--text-sub); border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
+  .move-popup-item {
+    padding: 9px 14px; font-size: .83rem; cursor: pointer;
+    display: flex; align-items: center; gap: 8px;
+    transition: background .12s; color: var(--text);
+  }
+  .move-popup-item:hover { background: var(--surface2); }
+  .move-popup-item.current { color: var(--text-sub); cursor: default; font-style: italic; }
+  .move-popup-item.all-group { color: var(--accent); }
   .earnings-date-input {
     width: 110px; padding: 3px 6px; border-radius: 5px;
     border: 1px solid var(--border); font-size: .75rem;
@@ -1870,7 +1889,13 @@ function renderWatchList() {
               onclick="event.stopPropagation()">
           </div>
         </td>
-        <td><div class="watch-actions">${extLinks}<button class="watch-action-btn del" onclick="removeWatch('${w.ticker}')">✕</button></div></td>
+        <td><div class="watch-actions">
+          ${extLinks}
+          ${watchGroups.filter(g=>g.id!=='all').length > 0 ? `
+            <button class="watch-action-btn" onclick="openMovePopup('${w.ticker}',event)" title="グループを移動" style="background:var(--surface2);">↗</button>
+          ` : ''}
+          <button class="watch-action-btn del" onclick="removeWatch('${w.ticker}')">✕</button>
+        </div></td>
       </tr>`;
     }).join('')}</tbody></table>`;
 }
@@ -1923,7 +1948,77 @@ async function saveMemoPrice(ticker, value) {
   renderWatchList();
 }
 
-// ===== 決算予定日保存 =====
+// ===== グループ移動ポップアップ =====
+let movePopupEl = null;
+
+function openMovePopup(ticker, event) {
+  event.stopPropagation();
+  closeMovePopup();
+
+  const w = watchList.find(x => x.ticker === ticker);
+  if (!w) return;
+
+  const userGroups = watchGroups.filter(g => g.id !== 'all');
+  const popup = document.createElement('div');
+  popup.className = 'move-popup';
+  popup.id = 'movePopup';
+
+  const items = userGroups.map(g => {
+    const isCurrent = w.groupId === g.id;
+    return `<div class="move-popup-item ${isCurrent ? 'current' : ''}"
+      onclick="${isCurrent ? '' : `moveToGroup('${ticker}','${g.id}');closeMovePopup()`}">
+      ${isCurrent ? '✓ ' : ''}${g.name}
+    </div>`;
+  }).join('');
+
+  // 「グループなし（すべて）」への移動
+  const toAll = w.groupId
+    ? `<div class="move-popup-item all-group" onclick="moveToGroup('${ticker}',null);closeMovePopup()">
+        ↩ グループなし
+      </div>`
+    : '';
+
+  popup.innerHTML = `
+    <div class="move-popup-header">📂 移動先グループを選択</div>
+    ${items}
+    ${toAll}
+  `;
+
+  document.body.appendChild(popup);
+  const rect = event.target.getBoundingClientRect();
+  const top  = Math.min(rect.bottom + 6, window.innerHeight - 200);
+  const left = Math.min(rect.left, window.innerWidth - 200);
+  popup.style.top  = Math.max(8, top)  + 'px';
+  popup.style.left = Math.max(8, left) + 'px';
+  movePopupEl = popup;
+
+  setTimeout(() => document.addEventListener('click', closeMovePopupOnOutside), 10);
+}
+
+function closeMovePopup() {
+  if (movePopupEl) { movePopupEl.remove(); movePopupEl = null; }
+  document.removeEventListener('click', closeMovePopupOnOutside);
+}
+function closeMovePopupOnOutside(e) {
+  if (movePopupEl && !movePopupEl.contains(e.target)) closeMovePopup();
+}
+
+async function moveToGroup(ticker, groupId) {
+  const w = watchList.find(x => x.ticker === ticker);
+  if (!w) return;
+  w.groupId = groupId || undefined;
+
+  if (CFG.sbUrl && CFG.sbKey && w.id) {
+    await sbFetch(`watchlist?id=eq.${w.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ groupId: groupId || null })
+    });
+  } else {
+    saveWatchData();
+  }
+  renderWatchGroups();
+  renderWatchList();
+}
 async function saveEarningsDate(ticker, value) {
   const w = watchList.find(x => x.ticker === ticker);
   if (!w) return;
@@ -2335,6 +2430,8 @@ async function addLinkItem() {
 document.addEventListener('keydown', e=>{
   if(e.key==='Escape') {
     ['settingsModal','linkModal','watchGroupModal','predictModal'].forEach(id=>document.getElementById(id).classList.remove('open'));
+    closeMovePopup();
+    closeNewsPopup();
   }
 });
 
